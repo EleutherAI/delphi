@@ -10,7 +10,7 @@ from typing import Callable, cast
 
 import orjson
 import torch
-from datasets import load_dataset
+from datasets import Dataset, load_dataset
 from simple_parsing import ArgumentParser, field, list_field
 from sparsify.data import chunk_and_tokenize
 from torch import Tensor
@@ -28,13 +28,14 @@ from delphi.autoencoders.DeepMind import load_gemma_autoencoders
 from delphi.autoencoders.load_sparsify import load_sparsify
 from delphi.clients import Offline, OpenRouter
 from delphi.config import CacheConfig, ExperimentConfig, LatentConfig
-from delphi.explainers import DefaultExplainer
+from delphi.explainers import ContrastiveExplainer, DefaultExplainer
 from delphi.latents import LatentCache, LatentDataset, LatentLoader
 from delphi.latents.constructors import default_constructor
 from delphi.latents.samplers import sample
 from delphi.log.result_analysis import log_results
 from delphi.pipeline import Pipe, Pipeline, process_wrapper
 from delphi.scorers import DetectionScorer, FuzzingScorer
+from delphi.semantic_index.index import build_or_load_index, load_index
 
 
 @dataclass
@@ -117,6 +118,9 @@ class RunConfig:
     scoring speed but can leak information to the fuzzing scorer, and increases the
     scorer LLM task difficulty."""
 
+    semantic_index: bool = False
+    """Whether to build semantic index of token sequences."""
+
 
 def load_artifacts(run_cfg: RunConfig):
     if run_cfg.load_in_8bit:
@@ -172,10 +176,12 @@ def load_artifacts(run_cfg: RunConfig):
     return run_cfg.hookpoints, hookpoint_to_sae_encode, model
 
 
-async def process_cache(
+async def run_pipeline(
+    cache_cfg: CacheConfig,
     latent_cfg: LatentConfig,
     run_cfg: RunConfig,
     experiment_cfg: ExperimentConfig,
+    base_path: Path,
     latents_path: Path,
     explanations_path: Path,
     scores_path: Path,
@@ -210,6 +216,9 @@ async def process_cache(
         latents=latent_dict,
         tokenizer=tokenizer,
     )
+
+    if run_cfg.semantic_index:
+        index = load_index(base_path, cache_cfg)
 
     if run_cfg.explainer_provider == "offline":
         client = Offline(
@@ -254,14 +263,21 @@ async def process_cache(
             f.write(orjson.dumps(result.explanation))
         return result
 
-    explainer_pipe = process_wrapper(
-        DefaultExplainer(
+    if run_cfg.semantic_index:
+        explainer = ContrastiveExplainer(
+            client,
+            tokenizer=dataset.tokenizer,
+            index=index,
+            threshold=0.3,
+        )
+    else:
+        explainer = DefaultExplainer(
             client,
             tokenizer=dataset.tokenizer,
             threshold=0.3,
-        ),
-        postprocess=explainer_postprocess,
-    )
+        )
+
+    explainer_pipe = process_wrapper(explainer, postprocess=explainer_postprocess)
 
     # Builds the record from result returned by the pipeline
     def scorer_preprocess(result):
@@ -311,25 +327,32 @@ async def process_cache(
     await pipeline.run(run_cfg.pipeline_num_proc)
 
 
-def populate_cache(
+def prepare_data(
     run_cfg: RunConfig,
     latent_cfg: LatentConfig,
     cfg: CacheConfig,
     model: PreTrainedModel,
     hookpoint_to_sae_encode: dict[str, Callable],
     latents_path: Path,
+    base_path: Path,
     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
     filter_bos: bool,
 ):
     """
     Populates an on-disk cache in `latents_path` with SAE latent activations.
+    Optionally builds a semantic index of token sequences.
     """
     latents_path.mkdir(parents=True, exist_ok=True)
 
     data = load_dataset(
         cfg.dataset_repo, name=cfg.dataset_name, split=cfg.dataset_split
     )
+    data = assert_type(Dataset, data)
     data = data.shuffle(run_cfg.seed)
+
+    if run_cfg.semantic_index:
+        build_or_load_index(data, base_path, cfg)
+
     data = chunk_and_tokenize(
         data, tokenizer, max_seq_len=cfg.ctx_len, text_key=cfg.dataset_row
     )
@@ -395,18 +418,22 @@ async def run(
         not glob(str(latents_path / ".*")) + glob(str(latents_path / "*"))
         or "cache" in run_cfg.overwrite
     ):
-        populate_cache(
+        prepare_data(
             run_cfg,
             latent_cfg,
             cache_cfg,
             model,
             hookpoint_to_sae_encode,
             latents_path,
+            base_path,
             tokenizer,
             filter_bos=run_cfg.filter_bos,
         )
     else:
         print(f"Files found in {latents_path}, skipping cache population...")
+
+    if run_cfg.semantic_index:
+        load_index(base_path, cache_cfg)
 
     del model, hookpoint_to_sae_encode
 
@@ -414,10 +441,12 @@ async def run(
         not glob(str(scores_path / ".*")) + glob(str(scores_path / "*"))
         or "scores" in run_cfg.overwrite
     ):
-        await process_cache(
+        await run_pipeline(
+            cache_cfg,
             latent_cfg,
             run_cfg,
             experiment_cfg,
+            base_path,
             latents_path,
             explanations_path,
             scores_path,

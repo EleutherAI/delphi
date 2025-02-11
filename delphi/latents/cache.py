@@ -186,7 +186,7 @@ class LatentCache:
         self, n_tokens: int, tokens: TensorType["batch", "sequence"]
     ) -> list[Tensor]:
         """
-        Load and prepare token batches for processing.
+        Split tokens into a list of token batches.
 
         Args:
             n_tokens: Total number of tokens to process.
@@ -222,7 +222,7 @@ class LatentCache:
 
     def run(self, n_tokens: int, tokens: TensorType["batch", "seq"]):
         """
-        Run the latent caching process.
+        Cache latents from the model.
 
         Args:
             n_tokens: Total number of tokens to process.
