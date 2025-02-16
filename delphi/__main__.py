@@ -36,6 +36,7 @@ from delphi.log.result_analysis import log_results
 from delphi.pipeline import Pipe, Pipeline, process_wrapper
 from delphi.scorers import DetectionScorer, FuzzingScorer
 from delphi.semantic_index.index import build_or_load_index, load_index
+from delphi.utils import assert_type
 
 
 @dataclass
@@ -176,7 +177,7 @@ def load_artifacts(run_cfg: RunConfig):
     return run_cfg.hookpoints, hookpoint_to_sae_encode, model
 
 
-async def run_pipeline(
+async def process_cache(
     cache_cfg: CacheConfig,
     latent_cfg: LatentConfig,
     run_cfg: RunConfig,
@@ -327,7 +328,7 @@ async def run_pipeline(
     await pipeline.run(run_cfg.pipeline_num_proc)
 
 
-def prepare_data(
+def populate_cache(
     run_cfg: RunConfig,
     latent_cfg: LatentConfig,
     cfg: CacheConfig,
@@ -418,7 +419,7 @@ async def run(
         not glob(str(latents_path / ".*")) + glob(str(latents_path / "*"))
         or "cache" in run_cfg.overwrite
     ):
-        prepare_data(
+        populate_cache(
             run_cfg,
             latent_cfg,
             cache_cfg,
