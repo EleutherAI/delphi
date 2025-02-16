@@ -442,7 +442,7 @@ async def run(
         not glob(str(scores_path / ".*")) + glob(str(scores_path / "*"))
         or "scores" in run_cfg.overwrite
     ):
-        await run_pipeline(
+        await process_cache(
             cache_cfg,
             latent_cfg,
             run_cfg,

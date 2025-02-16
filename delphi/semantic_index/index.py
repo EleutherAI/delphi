@@ -52,9 +52,18 @@ def save_index(index: faiss.IndexFlatL2, base_path: Path, cfg: CacheConfig):
         )
 
 
+# def split_text(text: str, cfg: CacheConfig):
+#     splitter = RecursiveCharacterTextSplitter(
+#         chunk_size=cfg.ctx_len, chunk_overlap=cfg.ctx_len // 4
+#     )
+#     return splitter.split_text(text)
+
+
 def split_text(text: str, cfg: CacheConfig):
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=cfg.ctx_len, chunk_overlap=cfg.ctx_len // 4
+        chunk_size=cfg.ctx_len,
+        chunk_overlap=cfg.ctx_len // 4,
+        length_function=lambda x: 1 + len(x) // 4,
     )
     return splitter.split_text(text)
 
@@ -105,6 +114,56 @@ def build_semantic_index(data: Dataset, cfg: CacheConfig):
     #         index.add_with_ids(sentence_embeddings, ids)
 
     return None
+    # """
+    # Build a semantic index of the token sequences.
+    # """
+
+    # model = SentenceTransformer(cfg.faiss_embedding_model, device="cuda")
+    # d = next(model.parameters()).dtype
+
+    # text = data['text']
+    # chunks = []
+    # for t in text:
+    #     chunks.extend(split_text(t, cfg))
+
+    # breakpoint()
+    # index = faiss.IndexHNSWFlat(d, cfg.faiss_hnsw_config["M"])
+    # index.metric_type = faiss.METRIC_L2
+    # index.hnsw.efConstruction = cfg.faiss_hnsw_config["efConstruction"]
+    # index.hnsw.efSearch = cfg.faiss_hnsw_config["efSearch"]
+
+    # index_tokenizer = AutoTokenizer.from_pretraine
+    # d('sentence-transformers/all-MiniLM-L6-v2')
+    # index_model = AutoModel.from_pretrained('sentence-transform
+    # ers/all-MiniLM-L6-v2').to("cuda")
+
+    # index_tokens = chunk_and_tokenize(data, index_tokenizer,
+    # max_seq_len=cfg.ctx_len, text_key=cfg.dataset_row)
+    # index_tokens = index_tokens["input_ids"]
+    # index_tokens = assert_type(Tensor, index_tokens)
+
+    # token_embeddings = index_model(index_tokens[:2].to("cuda")).last_hidden_state
+
+    # base_index = faiss.IndexFlatL2(token_embeddings.shape[-1])
+    # index = faiss.IndexIDMap(base_index)
+
+    # batch_size = 512
+    # dataloader = DataLoader(index_tokens, batch_size=batch_size) # type: ignore
+
+    # from tqdm import tqdm
+    # with torch.no_grad():
+    #     for batch_idx, batch in enumerate(tqdm(dataloader)):
+    #         batch = batch.to("cuda")
+    #         token_embeddings = index_model(batch).last_hidden_state
+    #         sentence_embeddings = token_embeddings.mean(dim=1)
+    #         sentence_embeddings = sentence_embeddings.cpu().numpy()
+    # .astype(np.float32)
+
+    #         ids = np.arange(batch_idx * batch_size, batch_idx * batch_size
+    # + len(batch))
+    #         index.add_with_ids(sentence_embeddings, ids)
+
+    # return None
 
 
 def build_or_load_index(data: Dataset, base_path: Path, cfg: CacheConfig):

@@ -53,8 +53,6 @@ class CacheConfig(Serializable):
 
     faiss_index_type: Literal["flat", "hnsw"] = "hnsw"
 
-    # faiss_hnsw_config: dict[str, int] =  {"M": 32, "efConstruction": 200,
-    # "efSearch": 128}
     faiss_hnsw_config: dict[str, int] = field(
         default_factory=lambda: {"M": 32, "efConstruction": 200, "efSearch": 128}
     )
