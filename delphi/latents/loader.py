@@ -322,3 +322,123 @@ class LatentDataset:
         if self.transform is not None:
             self.transform(record)
         return record
+
+
+class LatentLoader:
+    """
+    Loader class for processing latent records from a LatentDataset.
+    """
+
+    def __init__(
+        self,
+        latent_dataset: "LatentDataset",
+        constructor: Optional[Callable] = None,
+        sampler: Optional[Callable] = None,
+        transform: Optional[Callable] = None,
+    ):
+        """
+        Initialize a LatentLoader.
+
+        Args:
+            latent_dataset (LatentDataset): The dataset to load latents from.
+            constructor (Optional[Callable]): Function to construct latent records.
+            sampler (Optional[Callable]): Function to sample from latent records.
+            transform (Optional[Callable]): Function to transform latent records.
+        """
+        self.latent_dataset = latent_dataset
+        self.constructor = constructor
+        self.sampler = sampler
+        self.transform = transform
+
+    async def __aiter__(self):
+        """
+        Asynchronous iterator for processing latent records.
+
+        Yields:
+            LatentRecord: Processed latent records.
+        """
+        for buffer in self.latent_dataset.buffers:
+            async for record in self._aprocess_buffer(buffer):
+                yield record
+
+    async def _aprocess_buffer(self, buffer):
+        """
+        Asynchronously process a buffer.
+
+        Args:
+            buffer (TensorBuffer): Buffer to process.
+
+        Yields:
+            Optional[LatentRecord]: Processed latent record or None.
+        """
+        for data in buffer:
+            if data is not None:
+                record = await self._aprocess_latent(data)
+                if record is not None:
+                    yield record
+            await asyncio.sleep(0)  # Allow other coroutines to run
+
+    async def _aprocess_latent(self, buffer_output):
+        """
+        Asynchronously process a single latent.
+
+        Args:
+            buffer_output (BufferOutput): Latent data to process.
+
+        Returns:
+            Optional[LatentRecord]: Processed latent record or None.
+        """
+        record = LatentRecord(buffer_output.latent)
+        if self.constructor is not None:
+            self.constructor(record=record, buffer_output=buffer_output)
+        if self.sampler is not None:
+            self.sampler(record)
+        if self.transform is not None:
+            self.transform(record)
+        return record
+
+    def __iter__(self):
+        """
+        Synchronous iterator for processing latent records.
+
+        Yields:
+            LatentRecord: Processed latent records.
+        """
+        for buffer in self.latent_dataset.buffers:
+            for record in self._process_buffer(buffer):
+                yield record
+
+    def _process_buffer(self, buffer):
+        """
+        Process a buffer synchronously.
+
+        Args:
+            buffer (TensorBuffer): Buffer to process.
+
+        Yields:
+            Optional[LatentRecord]: Processed latent record or None.
+        """
+        for data in buffer:
+            if data is not None:
+                record = self._process_latent(data)
+                if record is not None:
+                    yield record
+
+    def _process_latent(self, buffer_output):
+        """
+        Process a single latent synchronously.
+
+        Args:
+            buffer_output (BufferOutput): Latent data to process.
+
+        Returns:
+            Optional[LatentRecord]: Processed latent record or None.
+        """
+        record = LatentRecord(buffer_output.latent)
+        if self.constructor is not None:
+            self.constructor(record=record, buffer_output=buffer_output)
+        if self.sampler is not None:
+            self.sampler(record)
+        if self.transform is not None:
+            self.transform(record)
+        return record

@@ -133,14 +133,10 @@ class RunConfig:
     )
     """Seed for the random number generator."""
 
-    log: bool = field(
+    verbose: bool = field(
         default=True,
     )
     """Whether to log summary statistics and results of the run."""
-
-    overwrite: list[str] = list_field()
-    """Whether to overwrite existing parts of the run. Options are 'cache', 'scores',
-    and 'visualize'."""
 
     num_examples_per_scorer_prompt: int = field(
         default=5,
@@ -148,3 +144,7 @@ class RunConfig:
     """Number of examples to use for each scorer prompt. Using more than 1 improves
     scoring speed but can leak information to the fuzzing and detection scorer,
     as well as increasing the scorer LLM task difficulty."""
+
+    overwrite: list[Literal["cache", "scores"]] = list_field()
+    """List of run stages to recompute. This is a debugging tool
+    and may be removed in the future."""

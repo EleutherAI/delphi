@@ -147,6 +147,7 @@ async def process_cache(
             client,
             tokenizer=dataset.tokenizer,
             threshold=0.3,
+            verbose=run_cfg.verbose,
         ),
         postprocess=explainer_postprocess,
     )
@@ -171,7 +172,7 @@ async def process_cache(
                 client,
                 tokenizer=dataset.tokenizer,  # type: ignore
                 batch_size=run_cfg.num_examples_per_scorer_prompt,
-                verbose=False,
+                verbose=run_cfg.verbose,
                 log_prob=False,
             ),
             preprocess=scorer_preprocess,
@@ -182,7 +183,7 @@ async def process_cache(
                 client,
                 tokenizer=dataset.tokenizer,  # type: ignore
                 batch_size=run_cfg.num_examples_per_scorer_prompt,
-                verbose=False,
+                verbose=run_cfg.verbose,
                 log_prob=False,
             ),
             preprocess=scorer_preprocess,
@@ -315,7 +316,7 @@ async def run(
     else:
         print(f"Files found in {scores_path}, skipping...")
 
-    if run_cfg.log:
+    if run_cfg.verbose:
         log_results(scores_path, visualize_path, run_cfg.hookpoints)
 
 

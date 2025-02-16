@@ -7,6 +7,8 @@ import numpy as np
 import torch
 from safetensors.numpy import load_file
 
+from delphi.latents.loader import LatentDataset
+
 
 class NeighbourCalculator:
     """

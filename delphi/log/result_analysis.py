@@ -10,7 +10,9 @@ from torch import Tensor
 pio.kaleido.scope.mathjax = None  # https://github.com/plotly/plotly.py/issues/3469
 
 
-def latent_balanced_score_metrics(df: pd.DataFrame, score_type: str, log: bool = True):
+def latent_balanced_score_metrics(
+    df: pd.DataFrame, score_type: str, verbose: bool = True
+):
     # Calculate weights based on non-errored examples
     valid_examples = df["total_examples"]
     weights = valid_examples / valid_examples.sum()
@@ -34,7 +36,7 @@ def latent_balanced_score_metrics(df: pd.DataFrame, score_type: str, log: bool =
         "false_negative_rate": np.average(df["false_negative_rate"], weights=weights),
     }
 
-    if log:
+    if verbose:
         print(f"\n--- {score_type.title()} Metrics ---")
         print(f"Accuracy: {metrics['accuracy']:.3f}")
         print(f"F1 Score: {metrics['f1_score']:.3f}")
