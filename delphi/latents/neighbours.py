@@ -177,14 +177,16 @@ class NeighbourCalculator:
         latent_index = latent_index[idx_cantor_sorted_idx]
 
         n_tokens = int(idx_cantor.max().item())
-        
+
         token_batch_size = 20_000
         done = False
         while not done:
             try:
                 print("Trying with batch size", token_batch_size)
                 # Find indices where idx_cantor crosses each batch boundary
-                bounday_values = torch.arange(token_batch_size, n_tokens, token_batch_size)
+                bounday_values = torch.arange(
+                    token_batch_size, n_tokens, token_batch_size
+                )
 
                 batch_boundaries_tensor = torch.searchsorted(idx_cantor, bounday_values)
                 batch_boundaries = [0] + batch_boundaries_tensor.tolist()
@@ -192,10 +194,14 @@ class NeighbourCalculator:
                 if batch_boundaries[-1] != len(idx_cantor):
                     batch_boundaries.append(len(idx_cantor))
 
-                co_occurrence_matrix = torch.zeros((n_latents, n_latents), dtype=torch.int32)
-                #co_occurrence_matrix = co_occurrence_matrix.cuda()
+                co_occurrence_matrix = torch.zeros(
+                    (n_latents, n_latents), dtype=torch.int32
+                )
+                # co_occurrence_matrix = co_occurrence_matrix.cuda()
 
-                for start, end in tqdm(zip(batch_boundaries[:-1], batch_boundaries[1:])):
+                for start, end in tqdm(
+                    zip(batch_boundaries[:-1], batch_boundaries[1:])
+                ):
                     # get all ind_cantor values between start and start + token_batch_size
                     selected_idx_cantor = idx_cantor[start:end]
                     selected_latent_index = latent_index[start:end]

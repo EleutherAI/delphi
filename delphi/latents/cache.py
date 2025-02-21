@@ -384,3 +384,100 @@ class LatentCache:
                 config_dict = cfg.to_dict()
                 config_dict["model_name"] = model_name
                 json.dump(config_dict, f, indent=4)
+
+    def generate_statistics_cache(self):
+
+        # Token frequency
+        for module_path in self.cache.latent_locations.keys():
+
+            tokens = self.cache.tokens[module_path]
+            total_n_tokens = tokens.shape[0] * tokens.shape[1]
+
+            latent_locations = self.cache.latent_locations[module_path][:, :2]
+
+            latents = self.cache.latent_locations[module_path][:, 2]
+            activations = self.cache.latent_activations[module_path]
+
+            # torch always sorts for unique, so we might as well do it
+            sorted_latents, latent_indices = latents.sort()
+            sorted_activations = activations[latent_indices]
+            sorted_tokens = tokens[latent_locations[latent_indices]]
+
+            unique_latents, counts = torch.unique_consecutive(
+                sorted_latents, return_counts=True
+            )
+
+            # How many unique latents ever activated on the cached tokens
+            fraction_alive = counts.shape[0] / self.width
+
+            print(f"Fraction of latents alive: {fraction_alive}")
+            # Compute densities of latents
+            densities = counts / total_n_tokens
+
+            # How many fired more than 1% of the time
+            one_percent = (densities > 0.01).sum() / self.width
+            print(f"Fraction of latents fired more than 1% of the time: {one_percent}")
+            # How many fired more than 10% of the time
+            ten_percent = (densities > 0.1).sum() / self.width
+            print(f"Fraction of latents fired more than 10% of the time: {ten_percent}")
+            # Try to estimate simple feature frequency
+            split_indices = torch.cumsum(counts, dim=0)
+            activation_splits = torch.tensor_split(
+                sorted_activations, split_indices[:-1]
+            )
+            token_splits = torch.tensor_split(sorted_tokens, split_indices[:-1])
+
+            # This might take a while and we may only care for statistics
+            # but for now we do the full loop
+            num_single_token_features = 0
+            maybe_single_token_features = 0
+            for latent_idx, activation_group, token_group in zip(
+                unique_latents, activation_splits, token_splits
+            ):
+                sorted_activation_group, sorted_indices = activation_group.sort()
+                sorted_token_group = token_group[sorted_indices]
+
+                number_activations = sorted_activation_group.shape[0]
+                # Get the first 50 elements if possible
+                num_elements = min(50, number_activations)
+
+                wanted_tokens = sorted_token_group[:num_elements]
+
+                # Check how many of them are exactly the same
+                _, unique_counts = torch.unique_consecutive(
+                    wanted_tokens, return_counts=True
+                )
+
+                max_count = unique_counts.max()
+                maybe_single_token = False
+                if max_count > 0.9 * num_elements:
+                    # Single token feature
+                    maybe_single_token = True
+
+                # Randomly sample 100 activations from the top 50%
+                num_samples = min(100, number_activations / 2)
+                top_50_percent = sorted_token_group[: number_activations // 2]
+                sampled_indices = torch.randperm(top_50_percent.shape[0])[:num_samples]
+                sampled_tokens = top_50_percent[sampled_indices]
+                _, unique_counts = torch.unique_consecutive(
+                    sampled_tokens, return_counts=True
+                )
+
+                max_count = unique_counts.max()
+                if max_count > 0.75 * num_samples:
+                    if maybe_single_token:
+                        num_single_token_features += 1
+                else:
+                    maybe_single_token_features += 1
+
+            single_token_fraction = (
+                num_single_token_features / maybe_single_token_features
+            )
+            strong_token_fraction = (
+                maybe_single_token_features / num_single_token_features
+            )
+            print(f"Fraction of weak token latents: {single_token_fraction}")
+            print(f"Fraction of strong token latents: {strong_token_fraction}")
+
+        pass
+        #
