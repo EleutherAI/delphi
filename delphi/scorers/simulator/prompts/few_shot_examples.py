@@ -8,11 +8,11 @@ from typing import Optional
 
 from simple_parsing import Serializable
 
-from ..activations.activations import ActivationRecord
+from ..activations.activation_records import ActivationRecord
 
 
 @dataclass
-class Example(Serializable):
+class SimulationExample(Serializable):
     activation_records: list[ActivationRecord]
     explanation: str
     first_revealed_activation_indices: list[int]
@@ -40,8 +40,6 @@ class FewShotExampleSet(Enum):
 
     ORIGINAL = "original"
     NEWER = "newer"
-    TEST = "test"
-    JL_FINE_TUNED = "jl_fine_tuned"
 
     @classmethod
     def from_string(cls, string: str) -> FewShotExampleSet:
@@ -50,20 +48,16 @@ class FewShotExampleSet(Enum):
                 return example_set
         raise ValueError(f"Unrecognized example set: {string}")
 
-    def get_examples(self) -> list[Example]:
+    def get_examples(self) -> list[SimulationExample]:
         """Returns regular examples for use in a few-shot prompt."""
         if self is FewShotExampleSet.ORIGINAL:
             return ORIGINAL_EXAMPLES
         elif self is FewShotExampleSet.NEWER:
             return NEWER_EXAMPLES
-        elif self is FewShotExampleSet.TEST:
-            return TEST_EXAMPLES
-        elif self is FewShotExampleSet.JL_FINE_TUNED:
-            return JL_FINE_TUNED_EXAMPLES
         else:
             raise ValueError(f"Unhandled example set: {self}")
 
-    def get_single_token_prediction_example(self) -> Example:
+    def get_single_token_prediction_example(self) -> SimulationExample:
         """
         Returns an example suitable for use in a subprompt for predicting a single
         token's normalized activation, for use with the "one token at a time"
@@ -71,44 +65,12 @@ class FewShotExampleSet(Enum):
         """
         if self is FewShotExampleSet.NEWER:
             return NEWER_SINGLE_TOKEN_EXAMPLE
-        elif self is FewShotExampleSet.TEST:
-            return TEST_SINGLE_TOKEN_EXAMPLE
         else:
             raise ValueError(f"Unhandled example set: {self}")
 
 
-TEST_EXAMPLES = [
-    Example(
-        activation_records=[
-            ActivationRecord(
-                tokens=["a", "b", "c"],
-                activations=[1.0, 0.0, 0.0],
-            ),
-            ActivationRecord(
-                tokens=["d", "e", "f"],
-                activations=[0.0, 1.0, 0.0],
-            ),
-        ],
-        explanation="vowels",
-        first_revealed_activation_indices=[0, 1],
-    ),
-]
-
-TEST_SINGLE_TOKEN_EXAMPLE = Example(
-    activation_records=[
-        ActivationRecord(
-            activations=[0.0, 0.0, 1.0],
-            tokens=["g", "h", "i"],
-        ),
-    ],
-    first_revealed_activation_indices=[],
-    token_index_to_score=2,
-    explanation="test explanation",
-)
-
-
 ORIGINAL_EXAMPLES = [
-    Example(
+    SimulationExample(
         activation_records=[
             ActivationRecord(
                 tokens=[
@@ -238,7 +200,7 @@ ORIGINAL_EXAMPLES = [
         first_revealed_activation_indices=[10, 3],
         explanation="present tense verbs ending in 'ing'",
     ),
-    Example(
+    SimulationExample(
         activation_records=[
             ActivationRecord(
                 tokens=[
@@ -372,7 +334,7 @@ ORIGINAL_EXAMPLES = [
         first_revealed_activation_indices=[5, 20],
         explanation="words related to physical medical conditions",
     ),
-    Example(
+    SimulationExample(
         activation_records=[
             ActivationRecord(
                 tokens=[
@@ -458,7 +420,7 @@ ORIGINAL_EXAMPLES = [
 
 
 NEWER_EXAMPLES = [
-    Example(
+    SimulationExample(
         activation_records=[
             ActivationRecord(
                 tokens=[
@@ -618,98 +580,11 @@ NEWER_EXAMPLES = [
                     0,
                 ],
             ),
-            # We sometimes exceed the max context size when this is included :(
-            # ActivationRecord(
-            #     tokens=[
-            #         " We",
-            #         " are",
-            #         " proud",
-            #         " of",
-            #         " our",
-            #         " national",
-            #         " achievements",
-            #         " in",
-            #         " mastering",
-            #         " all",
-            #         " aspects",
-            #         " of",
-            #         " the",
-            #         " fuel",
-            #         " cycle",
-            #         ".",
-            #         " The",
-            #         " current",
-            #         " international",
-            #         " interest",
-            #         " in",
-            #         " closing",
-            #         " the",
-            #         " fuel",
-            #         " cycle",
-            #         " is",
-            #         " a",
-            #         " vind",
-            #         "ication",
-            #         " of",
-            #         " Dr",
-            #         ".",
-            #         " B",
-            #         "hab",
-            #         "ha",
-            #         "’s",
-            #         " pioneering",
-            #         " vision",
-            #         " and",
-            #         " genius",
-            #     ],
-            #     activations=[
-            #         -0,
-            #         -0,
-            #         0,
-            #         -0,
-            #         -0,
-            #         0,
-            #         0,
-            #         0,
-            #         -0,
-            #         0,
-            #         0,
-            #         -0,
-            #         0,
-            #         -0.01,
-            #         0,
-            #         0,
-            #         -0,
-            #         -0,
-            #         0,
-            #         0,
-            #         0,
-            #         -0,
-            #         -0,
-            #         -0.01,
-            #         0,
-            #         0,
-            #         -0,
-            #         0,
-            #         0,
-            #         0,
-            #         0,
-            #         0,
-            #         -0,
-            #         0,
-            #         0,
-            #         0,
-            #         2.15,
-            #         0,
-            #         0,
-            #         0.03,
-            #     ],
-            # ),
         ],
-        first_revealed_activation_indices=[7],  # , 19],
+        first_revealed_activation_indices=[7],
         explanation="language related to something being groundbreaking",
     ),
-    Example(
+    SimulationExample(
         activation_records=[
             ActivationRecord(
                 tokens=[
@@ -986,146 +861,7 @@ NEWER_EXAMPLES = [
 ]
 
 
-NEWER_SINGLE_TOKEN_EXAMPLE = Example(
-    activation_records=[
-        ActivationRecord(
-            tokens=[
-                "B",
-                "10",
-                " ",
-                "111",
-                " MON",
-                "DAY",
-                ",",
-                " F",
-                "EB",
-                "RU",
-                "ARY",
-                " ",
-                "11",
-                ",",
-                " ",
-                "201",
-                "9",
-                " DON",
-                "ATE",
-                "fake higher scoring token",  # See below.
-            ],
-            activations=[
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0.37,
-                # This fake activation makes the previous token's activation normalize
-                # to 8, which might help address overconfidence in "10" activations
-                # for the one-token-at-a-time scoring prompt. This value and the
-                # associated token don't actually appear anywhere in the prompt.
-                0.45,
-            ],
-        ),
-    ],
-    first_revealed_activation_indices=[],
-    token_index_to_score=18,
-    explanation="instances of the token 'ate' as part of another word",
-)
-
-
-JL_FINE_TUNED_EXAMPLES = [
-    Example(
-        activation_records=[
-            ActivationRecord(
-                tokens=[
-                    "The",
-                    " cat",
-                    " jumped",
-                    " on",
-                    " my",
-                    " laptop",
-                    ".",
-                ],
-                activations=[0, 0, 0, 0, 0, 0, 0],
-            ),
-        ],
-        first_revealed_activation_indices=[],
-        explanation='the word "laptop" before the word "cat"',
-    ),
-    Example(
-        activation_records=[
-            ActivationRecord(
-                tokens=[
-                    "The",
-                    " cat",
-                    " jumped",
-                    " on",
-                    " my",
-                    " laptop",
-                    ".",
-                ],
-                activations=[0, 10, 0, 0, 0, 0, 0],
-            ),
-        ],
-        first_revealed_activation_indices=[],
-        explanation='the word "cat" before the word "laptop"',
-    ),
-    Example(
-        activation_records=[
-            ActivationRecord(
-                tokens=[
-                    "I",
-                    " am",
-                    " using",
-                    " a",
-                    " keyboard",
-                    ".",
-                ],
-                activations=[0, 0, 0, 0, 10, 0],
-            ),
-        ],
-        first_revealed_activation_indices=[],
-        explanation="the word before a period",
-    ),
-    Example(
-        activation_records=[
-            ActivationRecord(
-                tokens=[
-                    "The",
-                    " sun",
-                    " is",
-                    " shining",
-                    ".",
-                    " The",
-                    " clouds",
-                    " are",
-                    " gone",
-                    ".",
-                    " Great",
-                    " weather",
-                    "!",
-                ],
-                activations=[0, 0, 0, 10, 0, 0, 0, 0, 10, 0, 0, 0, 0],
-            ),
-        ],
-        first_revealed_activation_indices=[],
-        explanation="the word before period",
-    ),
-]
-
-NEWER_SINGLE_TOKEN_EXAMPLE = Example(
+NEWER_SINGLE_TOKEN_EXAMPLE = SimulationExample(
     activation_records=[
         ActivationRecord(
             tokens=[

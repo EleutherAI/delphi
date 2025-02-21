@@ -1,33 +1,7 @@
-# Dataclasses and enums for storing neuron explanations, their scores, and related data.
-# Also, related helper functions.
-
-from __future__ import annotations
-
 from dataclasses import dataclass
-from enum import Enum
 from typing import Optional
 
 from simple_parsing import Serializable
-
-
-class ActivationScale(str, Enum):
-    """
-    Which "units" are stored in the expected_activations/distribution_values fields of
-    a SequenceSimulation.
-
-    This enum identifies whether the values represent real activations of the neuron or
-    something else. Different scales are not necessarily related by a linear
-    transformation.
-    """
-
-    NEURON_ACTIVATIONS = "neuron_activations"
-    """Values represent real activations of the neuron."""
-    SIMULATED_NORMALIZED_ACTIVATIONS = "simulated_normalized_activations"
-    """
-    Values represent simulated activations of the neuron, normalized to the range
-    [0, 10].
-    This scale is arbitrary and should not be interpreted as a neuron activation.
-    """
 
 
 @dataclass
@@ -39,8 +13,6 @@ class SequenceSimulation(Serializable):
     expected_activations: list[float]
     """Expected value of the possibly-normalized activation for
     each token in the sequence."""
-    activation_scale: ActivationScale
-    """What scale is used for values in the expected_activations field."""
     distribution_values: list[list[float]]
     """
     For each token in the sequence, a list of values from the discrete
@@ -77,8 +49,8 @@ class ScoredSequenceSimulation(Serializable):
     activations.
     """
 
-    distance: int
-
+    distance: float | int
+    """Quantile or neighbor distance"""
     simulation: SequenceSimulation
     """The result of a simulation of neuron activations."""
     true_activations: list[float]
@@ -120,30 +92,3 @@ class ScoredSimulation(Serializable):
     Score based on absolute difference between real and simulated activations.
     absolute_dev_explained_score = 1 - mean(abs(real-predicted))/ mean(abs(real)).
     """
-
-    def get_preferred_score(self) -> Optional[float]:
-        """
-        This method may return None in cases where the score is undefined, for example
-        if the normalized activations were all zero, yielding a correlation coefficient
-        of NaN.
-        """
-        return self.ev_correlation_score
-
-
-@dataclass
-class ScoredExplanation(Serializable):
-    """Simulator parameters and the results of scoring it on multiple sequences"""
-
-    explanation: str
-    """The explanation used for simulation."""
-
-    scored_simulation: ScoredSimulation
-    """Result of scoring the neuron simulator on multiple sequences."""
-
-    def get_preferred_score(self) -> Optional[float]:
-        """
-        This method may return None in cases where the score is undefined, for example
-        if the normalized activations were all zero, yielding a correlation coefficient
-        of NaN.
-        """
-        return self.scored_simulation.get_preferred_score()

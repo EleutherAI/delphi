@@ -19,7 +19,7 @@ To run the default pipeline from the command line, use the following command:
 `python -m delphi meta-llama/Meta-Llama-3-8B EleutherAI/sae-llama-3-8b-32x --explainer_model 'hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4' --dataset_repo 'EleutherAI/fineweb-edu-dedup-10b' --dataset_split 'train[:1%]' --n_tokens 10_000_000 --max_latents 100 --hookpoints layers.5 --filter_bos --name llama-3-8B`
 
 This command will:
-1. Cache activations for the first 10 million tokens of EleutherAI/rpj-v2-sample.
+1. Cache activations for the first 10 million tokens of the dataset.
 2. Generate explanations for the first 100 features of layer 5 using the specified explainer model.
 3. Score the explanations uses fuzzing and detection scorers.
 4. Log summary metrics including per-scorer F1 scores and confusion matrices, and produce histograms of the scorer classification accuracies.

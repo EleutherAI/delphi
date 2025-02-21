@@ -1,7 +1,5 @@
-from ...latents import Example
 from ..scorer import Scorer, ScorerResult
-from .oai_autointerp import (
-    ActivationRecord,
+from .scoring import (
     ExplanationNeuronSimulator,
     LogprobFreeExplanationTokenSimulator,
     simulate_and_score,
@@ -10,7 +8,11 @@ from .oai_autointerp import (
 
 class OpenAISimulator(Scorer):
     """
-    Simple wrapper for the LogProbFreeExplanationTokenSimulator.
+    Simple wrapper for the the different simulators.
+    LogprobFreeExplanationTokenSimulator heavily inspired by
+    https://github.com/hijohnnylin/automated-interpretability,
+    which in turn is a fork of https://github.com/openai/automated-interpretability,
+    from which the ExplanationNeuronSimulator is also inspired.
     """
 
     name = "simulator"
@@ -18,11 +20,9 @@ class OpenAISimulator(Scorer):
     def __init__(
         self,
         client,
-        tokenizer,
         all_at_once=True,
     ):
         self.client = client
-        self.tokenizer = tokenizer
         self.all_at_once = all_at_once
 
     async def __call__(self, record):
@@ -37,9 +37,9 @@ class OpenAISimulator(Scorer):
             record.explanation,
         )
 
-        valid_activation_records = self.to_activation_records(record.test)
+        valid_activation_records = record.test
         if len(record.not_active) > 0:
-            non_activation_records = self.to_activation_records([record.not_active])
+            non_activation_records = record.not_active
         else:
             non_activation_records = []
 
@@ -51,15 +51,3 @@ class OpenAISimulator(Scorer):
             record=record,
             score=result,
         )
-
-    def to_activation_records(self, examples: list[Example]) -> list[ActivationRecord]:
-        return [
-            [
-                ActivationRecord(
-                    self.tokenizer.batch_decode(example.tokens),
-                    example.normalized_activations.half(),
-                )
-                for example in quantiles
-            ]
-            for quantiles in examples
-        ]

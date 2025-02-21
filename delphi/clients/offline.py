@@ -114,16 +114,17 @@ class Offline(Client):
         response = await loop.run_in_executor(
             None,
             partial(
-                self.client.generate,
+                self.client.generate,  # type: ignore
                 prompt_token_ids=prompts,
                 sampling_params=self.sampling_params,
                 use_tqdm=False,
             ),
         )
-
         new_response = []
         for i, r in enumerate(response):
+
             logprobs, prompt_logprobs = self._parse_logprobs(r)
+
             if self.statistics:
                 statistics[i].num_generated_tokens = len(r.outputs[0].token_ids)
                 # save the statistics to a file, name is a hash of the prompt

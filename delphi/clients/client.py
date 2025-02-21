@@ -6,8 +6,8 @@ from typing import Union
 @dataclass
 class Response:
     text: str
-    logprobs: list[float] = None
-    prompt_logprobs: list[float] = None
+    logprobs: list[float] | None = None
+    prompt_logprobs: list[float] | None = None
 
 
 class Client(ABC):
