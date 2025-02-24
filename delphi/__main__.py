@@ -257,6 +257,9 @@ def populate_cache(
     )
     cache.run(cache_cfg.n_tokens, tokens)
 
+    if run_cfg.verbose:
+        cache.generate_statistics_cache()
+
     cache.save_splits(
         # Split the activation and location indices into different files to make
         # loading faster
@@ -308,7 +311,7 @@ async def run(
 
     run_cfg.save_json(base_path / "run_config.json", indent=4)
 
-    latents_path = base_path / "latents"
+    latents_path = Path("temperature") / "latents"
     explanations_path = base_path / "explanations"
     scores_path = base_path / "scores"
     neighbours_path = base_path / "neighbours"
