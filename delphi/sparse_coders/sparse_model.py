@@ -10,13 +10,14 @@ from .custom.gemmascope import load_gemma_autoencoders
 from .load_sparsify import load_sparsify_hooks, load_sparsify_sparse_coders
 
 
-def load_hooks_sparse_coders(
+def load_hook_to_sparse_encode(
     model: PreTrainedModel,
     run_cfg: RunConfig,
     compile: bool = False,
 ) -> tuple[dict[str, Callable], bool]:
     """
-    Load sparse coders for specified hookpoints.
+    Load sparse coders for specified hookpoints and return a dictionary mapping
+    hookpoints to their encode functions.
 
     Args:
         model (PreTrainedModel): The model to load sparse coders for.

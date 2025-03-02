@@ -49,6 +49,7 @@ async def test():
         sampler_cfg=sampler_cfg,
         constructor_cfg=constructor_cfg,
         cache_cfg=cache_cfg,
+        semantic_index=True,
     )
 
     start_time = time.time()

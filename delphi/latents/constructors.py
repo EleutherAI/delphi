@@ -1,7 +1,9 @@
 from typing import Optional
 
+import faiss
 import torch
 from jaxtyping import Float
+from sentence_transformers import SentenceTransformer
 from torch import Tensor
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -189,8 +191,146 @@ def constructor(
             seed=seed,
             tokenizer=tokenizer,
         )
+    elif source_non_activating == "FAISS":
+        non_activating_examples = faiss_non_activation_windows(
+            available_indices=non_active_indices,
+            record=record,
+            tokens=tokens,
+            ctx_len=example_ctx_len,
+            tokenizer=tokenizer,
+            n_not_active=n_not_active,
+            embedding_model=constructor_cfg.faiss_embedding_model,
+            seed=seed,
+        )
     record.not_active = non_activating_examples
     return record
+
+
+def faiss_non_activation_windows(
+    available_indices: Float[Tensor, "windows"],
+    record: LatentRecord,
+    tokens: Float[Tensor, "batch seq"],
+    ctx_len: int,
+    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+    n_not_active: int,
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+    seed: int = 42,
+) -> list[NonActivatingExample]:
+    """
+    Generate hard negative examples using FAISS similarity search based
+    on text embeddings.
+
+    This function builds a FAISS index over non-activating examples and
+    finds examples that are semantically similar to the activating examples
+    based on text embeddings.
+
+    Args:
+        available_indices: Indices of windows where the latent is not active
+        record: The latent record containing activating examples
+        tokens: The input tokens
+        ctx_len: The context length for examples
+        tokenizer: The tokenizer to decode tokens
+        n_not_active: Number of non-activating examples to generate
+        embedding_model: Model used for text embeddings
+        seed: Random seed
+
+    Returns:
+        A list of non-activating examples that are semantically similar to
+            activating examples
+    """
+    torch.manual_seed(seed)
+    if n_not_active == 0:
+        return []
+
+    # Check if we have enough non-activating examples
+    if available_indices.numel() < n_not_active:
+        print("Not enough non-activating examples available")
+        return []
+
+    # Load the sentence transformer model for text embeddings
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = SentenceTransformer(embedding_model, device=device)
+
+    # Reshape tokens to get context windows
+    reshaped_tokens = tokens.reshape(-1, ctx_len)
+
+    # Get non-activating token windows
+    non_activating_tokens = reshaped_tokens[available_indices]
+
+    # Convert token windows to text for embedding
+    non_activating_texts = [
+        " ".join(tokenizer.batch_decode(tokens)) for tokens in non_activating_tokens
+    ]
+
+    # Get activating example texts
+    activating_texts = [
+        " ".join(example.str_tokens)
+        for example in record.examples[: min(10, len(record.examples))]
+    ]
+
+    if not activating_texts:
+        print("No activating examples available")
+        return []
+
+    # Compute embeddings for non-activating examples
+    non_activating_embeddings = model.encode(
+        non_activating_texts, show_progress_bar=False
+    )
+
+    # Compute embeddings for activating examples
+    activating_embeddings = model.encode(activating_texts, show_progress_bar=False)
+
+    # Create FAISS index
+    dim = non_activating_embeddings.shape[1]
+    index = faiss.IndexFlatL2(dim)
+
+    # Add non-activating embeddings to the index
+    index.add(non_activating_embeddings)
+
+    # Search for the nearest neighbors to each activating example
+    k = min(n_not_active, len(non_activating_embeddings))
+    collected_indices = set()
+    hard_negative_indices = []
+
+    # For each activating example, find the closest non-activating examples
+    for embedding in activating_embeddings:
+        # Skip if we already have enough examples
+        if len(hard_negative_indices) >= n_not_active:
+            break
+
+        # Search for similar non-activating examples
+        distances, indices = index.search(embedding.reshape(1, -1), k)
+
+        # Add new indices that haven't been collected yet
+        for idx in indices[0]:
+            if (
+                idx not in collected_indices
+                and len(hard_negative_indices) < n_not_active
+            ):
+                hard_negative_indices.append(idx)
+                collected_indices.add(idx)
+
+    # If we don't have enough hard negatives, add some random ones
+    if len(hard_negative_indices) < n_not_active:
+        remaining = n_not_active - len(hard_negative_indices)
+        available_indices_set = (
+            set(range(len(non_activating_embeddings))) - collected_indices
+        )
+        if available_indices_set:
+            random_indices = torch.tensor(list(available_indices_set))[
+                torch.randperm(len(available_indices_set))[:remaining]
+            ]
+            hard_negative_indices.extend(random_indices.tolist())
+
+    # Get the token windows for the selected hard negatives
+    selected_tokens = non_activating_tokens[hard_negative_indices]
+
+    # Create non-activating examples
+    return prepare_non_activating_examples(
+        selected_tokens,
+        -1.0,  # Using -1.0 as the distance since these are not neighbour-based
+        tokenizer,
+    )
 
 
 def neighbour_non_activation_windows(

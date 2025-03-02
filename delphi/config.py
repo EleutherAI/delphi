@@ -25,6 +25,9 @@ class SamplerConfig(Serializable):
 
 @dataclass
 class ConstructorConfig(Serializable):
+    faiss_embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    """Embedding model to use for FAISS index."""
+
     example_ctx_len: int = 32
     """Length of each sampled example sequence. Longer sequences
     reduce detection scoring performance in weak models.
@@ -41,11 +44,12 @@ class ConstructorConfig(Serializable):
     n_non_activating: int = 50
     """Number of non-activating examples to be constructed."""
 
-    non_activating_source: Literal["random", "neighbours"] = "random"
+    non_activating_source: Literal["random", "neighbours", "FAISS"] = "FAISS"
     """Source of non-activating examples. Random uses non-activating contexts
     sampled from any non activating window. Neighbours uses actvating contexts
-    from pre-computed latent neighbours. They are still non-activating but
-    have a higher chance of being similar to the activating examples."""
+    from pre-computed latent neighbours. FAISS uses semantic similarity search
+    to find hard negatives that are semantically similar to activating examples
+    but don't activate the latent."""
 
     neighbours_type: Literal[
         "co-occurrence", "decoder_similarity", "encoder_similarity"
@@ -57,6 +61,14 @@ class ConstructorConfig(Serializable):
 class CacheConfig(Serializable):
     dataset_repo: str = "EleutherAI/fineweb-edu-dedup-10b"
     """Dataset repository to use for generating latent activations."""
+
+    faiss_index_type: Literal["flat", "hnsw"] = "hnsw"
+
+    faiss_hnsw_config: dict[str, int] = field(
+        default_factory=lambda: {"M": 32, "efConstruction": 200, "efSearch": 128}
+    )
+
+    faiss_embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     dataset_split: str = "train[:1%]"
     """Dataset split to use for generating latent activations."""
@@ -130,6 +142,9 @@ class RunConfig(Serializable):
 
     filter_bos: bool = False
     """Whether to filter out BOS tokens from the cache."""
+
+    semantic_index: bool = False
+    """Whether to build semantic index of token sequences."""
 
     load_in_8bit: bool = False
     """Load the model in 8-bit mode."""
