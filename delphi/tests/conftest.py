@@ -77,9 +77,7 @@ def cache_setup(tmp_path_factory, mock_dataset: torch.Tensor, model: PreTrainedM
         sparse_model="EleutherAI/sae-pythia-160m-32k",
         hookpoints=["layers.1"],
     )
-    hookpoint_to_sparse_encode, _ = load_hooks_sparse_coders(
-        model, run_cfg_gemma
-    )
+    hookpoint_to_sparse_encode, _ = load_hooks_sparse_coders(model, run_cfg_gemma)
     print(hookpoint_to_sparse_encode)
     # Define cache config and initialize cache
     cache = LatentCache(

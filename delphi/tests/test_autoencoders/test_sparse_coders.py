@@ -71,7 +71,9 @@ def test_retrieve_autoencoders_from_sparsify(dummy_model, run_cfg_sparsify):
     """
     Tests that load_hooks_sparse_coders retrieves autoencoders from Sparsify.
     """
-    hookpoint_to_sparse_encode,_ = load_hooks_sparse_coders(dummy_model, run_cfg_sparsify)
+    hookpoint_to_sparse_encode, _ = load_hooks_sparse_coders(
+        dummy_model, run_cfg_sparsify
+    )
     # Verify that we received a dictionary of autoencoders.
     assert (
         isinstance(hookpoint_to_sparse_encode, dict)
@@ -94,7 +96,9 @@ def test_retrieve_autoencoders_from_gemma(dummy_model, run_cfg_gemma):
     """
     Tests that load_hooks_sparse_coders retrieves autoencoders from Gemma.
     """
-    hookpoint_to_sparse_encode,transcode = load_hooks_sparse_coders(dummy_model, run_cfg_gemma)
+    hookpoint_to_sparse_encode, transcode = load_hooks_sparse_coders(
+        dummy_model, run_cfg_gemma
+    )
     # Verify that we received a dictionary of autoencoders.
     assert (
         isinstance(hookpoint_to_sparse_encode, dict)
