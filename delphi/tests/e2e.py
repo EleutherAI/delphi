@@ -17,7 +17,7 @@ async def test():
         batch_size=8,
         cache_ctx_len=256,
         n_splits=5,
-        n_tokens=200_000,
+        n_tokens=10_000_000,
     )
     sampler_cfg = SamplerConfig(
         train_type="quantiles",
@@ -31,7 +31,7 @@ async def test():
         max_examples=10_000,
         example_ctx_len=32,
         n_non_activating=50,
-        non_activating_source="random",
+        non_activating_source="FAISS",
     )
     run_cfg = RunConfig(
         name="test",

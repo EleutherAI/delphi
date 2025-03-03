@@ -230,7 +230,7 @@ The experiments discussed in [the blog post](https://blog.eleuther.ai/autointerp
 
 ## Development
 
-Run unit tests: 
+Run unit tests:
 
 ```pytest .```
 

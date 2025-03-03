@@ -13,7 +13,7 @@ from transformers import (
 
 from delphi.config import CacheConfig, ConstructorConfig, RunConfig, SamplerConfig
 from delphi.latents import LatentCache
-from delphi.sparse_coders import load_hooks_sparse_coders
+from delphi.sparse_coders import load_hook_to_sparse_encode
 
 random_text = [
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
@@ -77,9 +77,7 @@ def cache_setup(tmp_path_factory, mock_dataset: torch.Tensor, model: PreTrainedM
         sparse_model="EleutherAI/sae-pythia-160m-32k",
         hookpoints=["layers.1"],
     )
-    hookpoint_to_sparse_encode, _ = load_hooks_sparse_coders(
-        model, run_cfg_gemma
-    )
+    hookpoint_to_sparse_encode, _ = load_hook_to_sparse_encode(model, run_cfg_gemma)
     print(hookpoint_to_sparse_encode)
     # Define cache config and initialize cache
     cache = LatentCache(

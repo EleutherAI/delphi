@@ -19,14 +19,14 @@ from transformers import (
 
 from delphi.clients import Offline, OpenRouter
 from delphi.config import RunConfig
-from delphi.explainers import DefaultExplainer
+from delphi.explainers import ContrastiveExplainer, DefaultExplainer
 from delphi.latents import LatentCache, LatentDataset
 from delphi.latents.neighbours import NeighbourCalculator
 from delphi.log.result_analysis import log_results
 from delphi.pipeline import Pipe, Pipeline, process_wrapper
 from delphi.scorers import DetectionScorer, FuzzingScorer
-from delphi.sparse_coders import load_hooks_sparse_coders, load_sparse_coders
-from delphi.utils import load_tokenized_data
+from delphi.sparse_coders import load_hook_to_sparse_encode, load_sparse_coders
+from delphi.utils import assert_type
 
 
 def load_artifacts(run_cfg: RunConfig):
@@ -49,7 +49,7 @@ def load_artifacts(run_cfg: RunConfig):
         token=run_cfg.hf_token,
     )
 
-    hookpoint_to_sparse_encode, transcode = load_hooks_sparse_coders(
+    hookpoint_to_sparse_encode, transcode = load_hook_to_sparse_encode(
         model,
         run_cfg,
         compile=True,
@@ -160,22 +160,36 @@ async def process_cache(
             f"Explainer provider {run_cfg.explainer_provider} not supported"
         )
 
+    from delphi.explainers.explainer import ExplainerResult
+
     def explainer_postprocess(result):
         with open(explanations_path / f"{result.record.latent}.txt", "wb") as f:
             f.write(orjson.dumps(result.explanation))
+
+        if not isinstance(result, ExplainerResult):
+            breakpoint()
         return result
 
-    explainer_pipe = process_wrapper(
-        DefaultExplainer(
+    if run_cfg.constructor_cfg.non_activating_source == "FAISS":
+        explainer = ContrastiveExplainer(
             client,
             threshold=0.3,
             verbose=run_cfg.verbose,
-        ),
-        postprocess=explainer_postprocess,
-    )
+        )
+    else:
+        explainer = DefaultExplainer(
+            client,
+            threshold=0.3,
+            verbose=run_cfg.verbose,
+        )
+
+    explainer_pipe = Pipe(process_wrapper(explainer, postprocess=explainer_postprocess))
 
     # Builds the record from result returned by the pipeline
     def scorer_preprocess(result):
+        if isinstance(result, list):
+            result = result[0]
+
         record = result.record
         record.explanation = result.explanation
         record.extra_examples = record.not_active
@@ -225,23 +239,38 @@ def populate_cache(
     model: PreTrainedModel,
     hookpoint_to_sparse_encode: dict[str, Callable],
     latents_path: Path,
+    base_path: Path,
     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
     transcode: bool,
 ):
     """
     Populates an on-disk cache in `latents_path` with SAE latent activations.
+    Optionally builds a semantic index of token sequences.
     """
     latents_path.mkdir(parents=True, exist_ok=True)
     cache_cfg = run_cfg.cache_cfg
-    tokens = load_tokenized_data(
-        cache_cfg.cache_ctx_len,
-        tokenizer,
+
+    from datasets import load_dataset
+    from sparsify.data import chunk_and_tokenize
+
+    data = load_dataset(
         cache_cfg.dataset_repo,
-        cache_cfg.dataset_split,
-        cache_cfg.dataset_name,
-        cache_cfg.dataset_column,
-        run_cfg.seed,
+        name=cache_cfg.dataset_name,
+        split=cache_cfg.dataset_split,
     )
+    data = data.shuffle(run_cfg.seed)
+
+    # if run_cfg.constructor_cfg.non_activating_source == "FAISS":
+    # build_or_load_index(data, base_path, run_cfg.cache_cfg)
+
+    tokens_ds = chunk_and_tokenize(
+        data,  # type: ignore
+        tokenizer,
+        max_seq_len=cache_cfg.cache_ctx_len,
+        text_key=cache_cfg.dataset_column,
+    )
+
+    tokens = tokens_ds["input_ids"]
 
     if run_cfg.filter_bos:
         if tokenizer.bos_token_id is None:
@@ -273,8 +302,8 @@ def populate_cache(
     cache.save_config(save_dir=latents_path, cfg=cache_cfg, model_name=run_cfg.model)
 
 
-def non_redundant_hookpoints(
-    hookpoint_to_sparse_encode: dict[str, Callable] | list[str],
+def filter_redundant_hookpoints(
+    hookpoint_list_or_dict: dict[str, Callable] | list[str],
     results_path: Path,
     overwrite: bool,
 ):
@@ -283,18 +312,16 @@ def non_redundant_hookpoints(
     """
     if overwrite:
         print("Overwriting results from", results_path)
-        return hookpoint_to_sparse_encode
+        return hookpoint_list_or_dict
     in_results_path = [x.name for x in results_path.glob("*")]
-    if isinstance(hookpoint_to_sparse_encode, dict):
+    if isinstance(hookpoint_list_or_dict, dict):
         non_redundant_hookpoints = {
-            k: v
-            for k, v in hookpoint_to_sparse_encode.items()
-            if k not in in_results_path
+            k: v for k, v in hookpoint_list_or_dict.items() if k not in in_results_path
         }
     else:
         non_redundant_hookpoints = [
             hookpoint
-            for hookpoint in hookpoint_to_sparse_encode
+            for hookpoint in hookpoint_list_or_dict
             if hookpoint not in in_results_path
         ]
     if not non_redundant_hookpoints:
@@ -325,44 +352,54 @@ async def run(
     hookpoints, hookpoint_to_sparse_encode, model, transcode = load_artifacts(run_cfg)
     tokenizer = AutoTokenizer.from_pretrained(run_cfg.model, token=run_cfg.hf_token)
 
-    nrh = non_redundant_hookpoints(
-        hookpoint_to_sparse_encode, latents_path, "cache" in run_cfg.overwrite
+    non_redundant_hookpoints_to_fwd = assert_type(
+        dict,
+        filter_redundant_hookpoints(
+            hookpoint_to_sparse_encode, latents_path, "cache" in run_cfg.overwrite
+        ),
     )
-    if nrh:
+    if non_redundant_hookpoints_to_fwd:
         populate_cache(
             run_cfg,
             model,
-            nrh,
+            non_redundant_hookpoints_to_fwd,
             latents_path,
+            base_path,
             tokenizer,
             transcode,
         )
 
     del model, hookpoint_to_sparse_encode
     if run_cfg.constructor_cfg.non_activating_source == "neighbours":
-        nrh = non_redundant_hookpoints(
-            hookpoints, neighbours_path, "neighbours" in run_cfg.overwrite
+        non_redundant_hookpoints = assert_type(
+            list[str],
+            filter_redundant_hookpoints(
+                hookpoints, neighbours_path, "neighbours" in run_cfg.overwrite
+            ),
         )
-        if nrh:
+        if non_redundant_hookpoints:
             create_neighbours(
                 run_cfg,
                 latents_path,
                 neighbours_path,
-                nrh,
+                non_redundant_hookpoints,
             )
     else:
         print("Skipping neighbour creation")
 
-    nrh = non_redundant_hookpoints(
-        hookpoints, scores_path, "scores" in run_cfg.overwrite
+    non_redundant_hookpoints = assert_type(
+        list,
+        filter_redundant_hookpoints(
+            hookpoints, scores_path, "scores" in run_cfg.overwrite
+        ),
     )
-    if nrh:
+    if non_redundant_hookpoints:
         await process_cache(
             run_cfg,
             latents_path,
             explanations_path,
             scores_path,
-            nrh,
+            non_redundant_hookpoints,
             tokenizer,
             latent_range,
         )

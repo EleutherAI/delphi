@@ -1,5 +1,8 @@
 name: Tests
 
+env:
+  HF_HUB_DOWNLOAD_TIMEOUT: 30
+
 on:
   push:
     branches: [ main ]
