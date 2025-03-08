@@ -78,6 +78,9 @@ class CacheConfig(Serializable):
     n_splits: int = 5
     """Number of splits to divide .safetensors into."""
 
+    detuple_activations: bool = True
+    """Whether to take the first element of the activation tuple."""
+
 
 @dataclass
 class RunConfig:

@@ -29,17 +29,17 @@ from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoConfig
 import gc
 import re
-#%%
 args = Namespace(
     module="model.layers.9",
     latent_options=LatentConfig(),
     latents=100,
     model="sae_pkm/baseline",
-    sae_path="../halutsae/sae-pkm/smollm/baseline/layers.9"
+    sae_path="../halutsae/sae-pkm/smollm/baseline"
 )
+#%%
 module = args.module
 latent_cfg = args.latent_options
-n_latents = args.latents  
+n_latents = args.latents
 start_latent = 0
 sae_model = args.model
 latent_dict = {f"{module}": torch.arange(start_latent,start_latent+n_latents)}
@@ -67,7 +67,8 @@ lm_head = torch.nn.Sequential(
 #%%
 lm_config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
 #%%
-from safetensors.torch import load_file
+from pathlib import Path
+from delphi.sparse_coders.sparse_model import load_sparsify_sparse_coders
 if (router_match := re.match(r"\.model\.layers\.(\d+)\.router", args.module)):
     cache_lm
     # monet model
@@ -86,11 +87,16 @@ if (router_match := re.match(r"\.model\.layers\.(\d+)\.router", args.module)):
         bias = (b1[:, None, :] + b2[None, :, :]).reshape(-1, lm_config.hidden_size)
         total_bias = total_bias + bias
     latent_to_resid = total_bias
-if (transcoder_match := re.match(r"model\.layers\.(\d+)", args.module)):
-    cache_lm
-    layer = int(transcoder_match.group(1))
-    transcoder_weights = load_file(args.sae_path + "/sae.safetensors")
-    w_dec = transcoder_weights["W_dec"]
+if (transcoder_match := re.match(r"model\.(layers\.(\d+))", args.module)):
+    module_raw = transcoder_match.group(1)
+    hookpoint_to_sparse_model = load_sparsify_sparse_coders(
+        Path(args.sae_path),
+        [module_raw],
+        "cuda",
+        compile=False,
+    )
+    transcoder = hookpoint_to_sparse_model[module_raw]
+    w_dec = transcoder.W_dec.data
     latent_to_resid = w_dec
 #%%
 del cache_lm
@@ -129,7 +135,7 @@ async for record in loader:
     latent_id = record.buffer.locations[0, 2].item()
     decoder_resid = latent_to_resid[latent_id].to(record.buffer.activations.device)
     logit_vector = lm_head(decoder_resid)
-    
+
     buffer = record.buffer
     activations, locations = buffer.activations, buffer.locations
     _max = activations.max()
@@ -148,7 +154,7 @@ async for record in loader:
         quantiles=quantiles + [1.0],
         ranges_and_precisions=ranges_and_precisions
     ))
-        
+
     latent_data = FeatureData()
     latent_data.feature_tables_data = FeatureTablesData()
     latent_data.logits_histogram_data = LogitsHistogramData.from_data(

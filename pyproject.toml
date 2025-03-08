@@ -38,6 +38,8 @@ dependencies = [
     "seaborn>=0.13.2",
     "anyio>=4.8.0",
     "torchtyping>=0.1.5",
+    "opt-einsum>=3.4.0",
+    "nnsight>=0.4.3",
 ]
 
 [project.optional-dependencies]
@@ -58,7 +60,10 @@ url = "https://flashinfer.ai/whl/cu124/torch2.5/flashinfer-python"
 
 [tool.ruff]
 # TODO: Clean up or remove experiments folder.
-exclude = ["experiments", "**/prompts/*", "**/prompts.py","**/simulator.py"]
+exclude = [
+    "experiments", "**/prompts/*", "**/prompts.py","**/simulator.py",
+    "examples"
+]
 # Avoid automatically removing unused imports in __init__.py files.
 # Such imports will be flagged with a dedicated message suggesting
 # that the import is either added to the module's __all__ symbol
@@ -70,3 +75,6 @@ line-length = 88
 # Enable pycodestyle (`E`), Pyflakes (`F`), and isort (`I`) codes
 # See https://beta.ruff.rs/docs/rules/ for more possible rules
 select = ["E", "F", "I"]
+
+[tool.black]
+force_exclude = "/examples/"

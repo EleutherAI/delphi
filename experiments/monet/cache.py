@@ -6,14 +6,20 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from delphi.autoencoders.wrapper import AutoencoderLatents
 import numpy as np
 import torch
+from torch import nn
 import torch.distributed as dist
+from functools import partial
 
 from delphi.utils import load_tokenized_data
-from delphi.features import FeatureCache
+from delphi.latents import LatentCache
 from delphi.config import CacheConfig
 
+
 def to_dense(
-    top_acts: torch.Tensor, top_indices: torch.Tensor, num_latents: int, instance_dims=[0, 1]
+    top_acts: torch.Tensor,
+    top_indices: torch.Tensor,
+    num_latents: int,
+    instance_dims=[0, 1],
 ):
     instance_shape = [top_acts.shape[i] for i in instance_dims]
     dense_empty = torch.zeros(
@@ -25,11 +31,14 @@ def to_dense(
     )
     return dense_empty.scatter(-1, top_indices.long(), top_acts)
 
+
 def parse_args():
     parser = ArgumentParser()
-    parser.add_arguments(CacheConfig, dest="options")
+    parser.add_arguments(
+        CacheConfig, dest="options", default=CacheConfig(detuple_activations=False)
+    )
     parser.add_argument("--size", type=str, default="850m")
-    parser.add_argument("--separate_moe", type=bool, default=True)
+    parser.add_argument("--separate_moe", type=bool, default=False)
     args = parser.parse_args()
     model_name = f"MonetLLM/monet-vd-{args.size.upper()}-100BT-hf"
     args.tokenizer_model = model_name
@@ -38,11 +47,17 @@ def parse_args():
 
     return cfg, args
 
+
+class ArgsIdentity(nn.Module):
+    def forward(self, *xs, hook=False):
+        return xs
+
+
 def main():
     if "LOCAL_RANK" in os.environ:
         dist.init_process_group(backend="nccl")
 
-    rank = int(os.environ.get('LOCAL_RANK') or 0)
+    rank = int(os.environ.get("LOCAL_RANK") or 0)
     torch.cuda.set_device(rank)
 
     cfg, args = parse_args()
@@ -61,7 +76,13 @@ def main():
 
     submodule_dict = {}
 
+    save_dir = (
+        f"results/monet_cache{'_separate' if args.separate_moe else ''}/{args.size}"
+    )
+    processed_dir = f"results/monet_cache{'_separate' if args.separate_moe else ''}_converted/{args.size}"
+    new_submodules = False
     for layer in range(0, len(model.model.layers), model_config.moe_groups):
+
         @torch.compile
         def _forward(x):
             g1, g2 = x
@@ -71,12 +92,28 @@ def main():
                 return torch.einsum("bshx,bshy->bsxy", g1, g2).view(*g1.shape[:2], -1)
 
         submodule = model.model.layers[layer].router
+        if os.path.exists(f"{save_dir}/{submodule.path}") or os.path.exists(
+            f"{processed_dir}/{submodule.path}"
+        ):
+            print("Skipping", submodule.path, "for size", args.size)
+            continue
+        else:
+            print("Caching into", f"{save_dir}/{submodule.path}")
+        new_submodules = True
         submodule.ae = AutoencoderLatents(
-            None, _forward,
-            width=model.config.moe_experts ** 2 if not args.separate_moe else model_config.moe_heads * model_config.moe_experts * 2,
-            hookpoint=""
+            ArgsIdentity(),
+            _forward,
+            width=(
+                model.config.moe_experts**2
+                if not args.separate_moe
+                else model_config.moe_heads * model_config.moe_experts * 2
+            ),
+            hookpoint="",
         )
-        submodule_dict[submodule.path] = submodule
+        submodule_dict[submodule.path] = submodule.ae
+    if not new_submodules:
+        print("All submodules have been cached for size", args.size)
+        return
 
     with model.edit("") as edited:
         for _, submodule in submodule_dict.items():
@@ -88,29 +125,21 @@ def main():
         tokenizer=tokenizer,
         dataset_repo="EleutherAI/fineweb-edu-dedup-10b",
         dataset_split="train[:1%]",
-        dataset_row="text"
+        column_name="text",
     )
 
-    cache = FeatureCache(
+    cache = LatentCache(
         edited,
         submodule_dict,
-        batch_size = 48,
+        batch_size=32,
     )
 
     with torch.inference_mode():
-        cache.run(n_tokens = 10_000_000, tokens=tokens)
+        cache.run(n_tokens=10_000_000, tokens=tokens, detuple_activations=False)
 
-    save_dir = f"results/monet_cache{'/separate' if args.separate_moe else ''}/{args.size}"
+    cache.save_splits(n_splits=cfg.n_splits, save_dir=save_dir)
+    cache.save_config(save_dir=save_dir, cfg=cfg, model_name=args.tokenizer_model)
 
-    cache.save_splits(
-        n_splits=cfg.n_splits, 
-        save_dir=save_dir
-    )
-    cache.save_config(
-        save_dir=save_dir,
-        cfg=cfg,
-        model_name=args.tokenizer_model
-    )
 
 if __name__ == "__main__":
     main()

@@ -6,7 +6,9 @@ from transformers import PreTrainedModel
 
 
 @contextmanager
-def collect_activations(model: PreTrainedModel, hookpoints: list[str]):
+def collect_activations(
+    model: PreTrainedModel, hookpoints: list[str], detuple_activations: bool = True
+):
     """
     Context manager that temporarily hooks models and collects their activations.
     An activation tensor is produced for each batch processed and stored in a list
@@ -25,7 +27,7 @@ def collect_activations(model: PreTrainedModel, hookpoints: list[str]):
     def create_hook(hookpoint: str):
         def hook_fn(module: nn.Module, input: Any, output: Tensor) -> Tensor | None:
             # If output is a tuple (like in some transformer layers), take first element
-            if isinstance(output, tuple):
+            if isinstance(output, tuple) and detuple_activations:
                 activations[hookpoint] = output[0]
             else:
                 activations[hookpoint] = output

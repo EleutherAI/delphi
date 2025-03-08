@@ -238,7 +238,12 @@ class LatentCache:
                 filtered_submodules[hookpoint] = self.hookpoint_to_sae[hookpoint]
         self.hookpoint_to_sae = filtered_submodules
 
-    def run(self, n_tokens: int, tokens: token_tensor_shape):
+    def run(
+        self,
+        n_tokens: int,
+        tokens: token_tensor_shape,
+        detuple_activations: bool = True,
+    ):
         """
         Run the latent caching process.
 
@@ -256,9 +261,11 @@ class LatentCache:
             for batch_number, batch in enumerate(token_batches):
                 total_tokens += tokens_per_batch
 
-                with torch.no_grad():
+                with torch.inference_mode():
                     with collect_activations(
-                        self.model, list(self.hookpoint_to_sparse_encode.keys())
+                        self.model,
+                        list(self.hookpoint_to_sparse_encode.keys()),
+                        detuple_activations=detuple_activations,
                     ) as activations:
                         self.model(batch.to(self.model.device))
 
@@ -269,6 +276,8 @@ class LatentCache:
                             self.cache.add(sae_latents, batch, batch_number, hookpoint)
                             if self.width is None:
                                 self.width = sae_latents.shape[2]
+                            del sae_latents
+                        del activations
 
                 # Update the progress bar
                 pbar.update(1)
