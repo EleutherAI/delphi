@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -95,9 +96,67 @@ def cache_setup(tmp_path_factory, mock_dataset: torch.Tensor, model: PreTrainedM
     # Save the cache config
 
     cache.save_config(temp_dir, cache_cfg, "EleutherAI/pythia-70m")
+    cache.save_firing_counts()
+    hookpoint_firing_counts = torch.load(
+        Path.cwd() / "results" / "log" / "hookpoint_firing_counts.pt"
+    )
     return {
         "cache": cache,
         "tokens": tokens,
         "cache_cfg": cache_cfg,
         "temp_dir": temp_dir,
+        "hookpoint_firing_counts": hookpoint_firing_counts,
     }
+
+
+def test_hookpoint_firing_counts_initialization(cache_setup):
+    """
+    Ensure that hookpoint_firing_counts is initialized as an empty dictionary.
+    """
+    cache = cache_setup["cache"]
+    assert isinstance(cache.hookpoint_firing_counts, dict)
+    assert len(cache.hookpoint_firing_counts) == 0  # Should be empty before run()
+
+
+def test_hookpoint_firing_counts_updates(cache_setup):
+    """
+    Ensure that hookpoint_firing_counts is properly updated after running the cache.
+    """
+    cache = cache_setup["cache"]
+    tokens = cache_setup["tokens"]
+    cache.run(cache_setup["cache_cfg"].n_tokens, tokens)
+
+    assert (
+        len(cache.hookpoint_firing_counts) > 0
+    ), "hookpoint_firing_counts should not be empty after run()"
+    for hookpoint, counts in cache.hookpoint_firing_counts.items():
+        assert isinstance(
+            counts, torch.Tensor
+        ), f"Counts for {hookpoint} should be a torch.Tensor"
+        assert counts.ndim == 1, f"Counts for {hookpoint} should be a 1D tensor"
+        assert (counts >= 0).all(), f"Counts for {hookpoint} should be non-negative"
+
+
+def test_hookpoint_firing_counts_persistence(cache_setup):
+    """
+    Ensure that hookpoint_firing_counts are correctly saved and loaded.
+    """
+    cache = cache_setup["cache"]
+    firing_counts_path = Path.cwd() / "results" / "log" / "hookpoint_firing_counts.pt"
+
+    cache.save_firing_counts()
+
+    assert firing_counts_path.exists(), "Firing counts file should exist after saving"
+
+    loaded_counts = torch.load(firing_counts_path)
+    assert isinstance(
+        loaded_counts, dict
+    ), "Loaded firing counts should be a dictionary"
+    assert (
+        loaded_counts.keys() == cache.hookpoint_firing_counts.keys()
+    ), "Loaded firing counts keys should match saved keys"
+
+    for hookpoint, counts in loaded_counts.items():
+        assert torch.equal(
+            counts, cache.hookpoint_firing_counts[hookpoint]
+        ), f"Mismatch in firing counts for {hookpoint}"

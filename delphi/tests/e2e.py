@@ -58,7 +58,10 @@ async def test():
 
     # Performs better than random guessing
     scores_path = Path("results") / run_cfg.name / "scores"
-    df = build_scores_df(scores_path, run_cfg.hookpoints)
+    hookpoint_firing_counts = torch.load(
+        Path.cwd() / "results" / "log" / "hookpoint_firing_counts.pt"
+    )
+    df = build_scores_df(scores_path, run_cfg.hookpoints, hookpoint_firing_counts)
     for score_type in df["score_type"].unique():
         score_df = df.query(f"score_type == '{score_type}'")
 
