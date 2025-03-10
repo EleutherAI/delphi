@@ -150,8 +150,22 @@ class LatentDataset:
         else:
             self._build_selected(raw_dir, latents)
         # TODO: this assumes that all modules have the same config
-        cache_config_dir = f"{raw_dir}/{self.modules[0]}/config.json"
-        with open(cache_config_dir, "r") as f:
+        if len(self.modules) == 0:
+            raise ValueError("No modules found in the cache folder")
+        cache_config_path = f"{raw_dir}/{self.modules[0]}/config.json"
+        for module in self.modules:
+            if not os.path.exists(f"{raw_dir}/{module}"):
+                raise FileNotFoundError(
+                    f"Could not find {module} in {raw_dir}. "
+                    "Please checked the parameters passed to the dataset."
+                )
+            cache_config_path = f"{raw_dir}/{module}/config.json"
+            if not os.path.exists(cache_config_path):
+                raise FileNotFoundError(
+                    "Each directory in the cache folder must have a config.json file. "
+                    f"Could not find {cache_config_path} in {raw_dir}."
+                )
+        with open(cache_config_path, "r") as f:
             cache_config = json.load(f)
         if tokenizer is None:
             self.tokenizer = AutoTokenizer.from_pretrained(cache_config["model_name"])
@@ -251,6 +265,13 @@ class LatentDataset:
         for module in self.modules:
             edges = self._edges(raw_dir, module)
             selected_latents = latents[module]
+            if len(selected_latents) == 0:
+                continue
+            if len(edges) == 0:
+                raise FileNotFoundError(
+                    f"Could not find any safetensor files in {raw_dir}/{module}, "
+                    "but latents were selected."
+                )
             boundaries = [edges[0][0]] + [edge[1] + 1 for edge in edges]
 
             bucketized = torch.bucketize(
