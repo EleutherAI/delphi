@@ -285,7 +285,10 @@ class LatentCache:
 
         print(f"Total tokens processed: {total_tokens:,}")
         self.cache.save()
-        del sae_latents
+        try:
+            del sae_latents
+        except UnboundLocalError:
+            pass
 
     def save(self, save_dir: Path, save_tokens: bool = True):
         """
@@ -323,6 +326,30 @@ class LatentCache:
 
         # Adjust end by one
         return list(zip(boundaries[:-1], boundaries[1:] - 1))
+
+    def estimate_size(self) -> int:
+        """
+        Estimate the size of the cache in bytes.
+
+        Returns:
+            int: Estimated size of the cache in bytes.
+        """
+        total_size = 0
+        for module_path in self.cache.latent_locations.keys():
+            total_size += (
+                self.cache.latent_locations[module_path].element_size()
+                * self.cache.latent_locations[module_path].numel()
+            )
+            total_size += (
+                self.cache.latent_activations[module_path].element_size()
+                * self.cache.latent_activations[module_path].numel()
+            )
+            total_size += (
+                self.cache.tokens[module_path].element_size()
+                * self.cache.tokens[module_path].numel()
+            )
+
+        return total_size
 
     def save_splits(self, n_splits: int, save_dir: Path, save_tokens: bool = True):
         """

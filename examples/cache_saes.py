@@ -11,6 +11,7 @@ from sparsify import Sae
 from pathlib import Path
 from torch import nn
 from typing import Callable
+from pprint import pprint
 import json
 import os
 
@@ -58,7 +59,7 @@ ACTIVATIONS_CLASSES = {
 }
 
 
-def main(cfg: CacheConfig, args): 
+def main(cfg: CacheConfig, args):
     k = args.k
     expansion = args.expansion
     transcode = args.transcode
@@ -66,29 +67,41 @@ def main(cfg: CacheConfig, args):
     model_name = args.model_name
     sae_dir = Path(args.sae_dir)
 
-    for sae_dir in sae_dir.glob("*"):
+    if args.path:
+        sae_dir = Path(args.path)
         config_path = sae_dir / "config.json"
         if not config_path.exists():
-            continue
+            raise FileNotFoundError("No config.json found")
         config = json.loads(config_path.read_text())
-        if config["sae"]["expansion_factor"] != expansion:
-            continue
-        if config["sae"]["encoder_pkm"] != pkm:
-            continue        
-        if config["sae"]["encoder_kron"] != args.kron:
-            continue
-        if config["transcode"] != transcode:
-            continue
-        if config["sae"]["k"] != k:
-            continue
-        if config["sae"]["monet"] != args.monet:
-            continue
-        if model_name not in config["model"]:
-            continue
+        pprint(config)
         model_name = config["model"]
-        break
+        k = config["sae"]["k"]
+        expansion = config["sae"]["expansion_factor"]
+        transcode = config["sae"]["transcode"]
     else:
-        raise FileNotFoundError("No matching SAE found")
+        for sae_dir in sae_dir.glob("*"):
+            config_path = sae_dir / "config.json"
+            if not config_path.exists():
+                continue
+            config = json.loads(config_path.read_text())
+            if config["sae"]["expansion_factor"] != expansion:
+                continue
+            if config["sae"]["encoder_pkm"] != pkm:
+                continue
+            if config["sae"]["encoder_kron"] != args.kron:
+                continue
+            if config["transcode"] != transcode:
+                continue
+            if config["sae"]["k"] != k:
+                continue
+            if config["sae"]["monet"] != args.monet:
+                continue
+            if model_name not in config["model"]:
+                continue
+            model_name = config["model"]
+            break
+        else:
+            raise FileNotFoundError("No matching SAE found")
     print("Using config", sae_dir.name)
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -101,14 +114,29 @@ def main(cfg: CacheConfig, args):
     model.tokenizer = AutoTokenizer.from_pretrained(model_name)
     submodule_dict = {}
 
+    name = sae_dir.name
+    cache_save_dir = f"results/sae-pkm/{name}"
+    os.makedirs(cache_save_dir, exist_ok=True)
+    cache_save_dir = Path(cache_save_dir)
+
     device = "cuda:0"
     for hookpoint in config["hookpoints"]:
         weight_dir = sae_dir / hookpoint
-        
-        sae = Sae.load_from_disk(weight_dir, device=device).to(dtype=model.dtype)
+
+        try:
+            sae = Sae.load_from_disk(weight_dir, device=device).to(dtype=model.dtype)
+        except RuntimeError:
+            open("failed_to_load.txt", "a").write(str(weight_dir) + "\n")
+            raise
         if not hookpoint.startswith(model.base_model_prefix):
             hookpoint = f"{model.base_model_prefix}.{hookpoint}"
-        
+
+        if (cache_save_dir / ("." + hookpoint)).exists():
+            print("Skipping", hookpoint)
+            continue
+        else:
+            print("Caching", (cache_save_dir / ("." + hookpoint)))
+
         def _forward(sae, k,x):
             encoded = sae.pre_acts(x)
             if k is not None:
@@ -117,7 +145,7 @@ def main(cfg: CacheConfig, args):
                 trained_k = sae.cfg.k
             topk = TopK(trained_k, postact_fn=ACTIVATIONS_CLASSES["Identity"]())
             return topk(encoded)
-        
+
         atoms = hookpoint.split(".")
         submodule = model
         for atom in atoms:
@@ -128,6 +156,13 @@ def main(cfg: CacheConfig, args):
         )
 
         submodule_dict["." + hookpoint] = submodule.ae
+
+    if not submodule_dict:
+        print("All submodules have been cached")
+        return
+    else:
+        print("Caching into", cache_save_dir)
+        print("Submodules:", submodule_dict.keys())
 
     with model.edit("") as edited:
         for path, submodule in submodule_dict.items():
@@ -144,8 +179,8 @@ def main(cfg: CacheConfig, args):
         cfg.dataset_split,
     )
     cache = LatentCache(
-        edited, 
-        submodule_dict, 
+        edited,
+        submodule_dict,
         batch_size=cfg.batch_size,
     )
     # name=""
@@ -154,14 +189,10 @@ def main(cfg: CacheConfig, args):
     # name += f"_k-{k}"
     # name += "_trans" if transcode else ""
     # name += "_pkm" if pkm else ""
-    name = sae_dir.name
     cache.run(10_000_000, tokens)
-    cache_save_dir = f"results/sae_pkm/{name}"
-    os.makedirs(cache_save_dir, exist_ok=True)
-    cache_save_dir = Path(cache_save_dir)
 
     cache.save_splits(
-        n_splits=cfg.n_splits, 
+        n_splits=cfg.n_splits,
         save_dir=cache_save_dir
     )
     cache.save_config(
@@ -176,6 +207,7 @@ if __name__ == "__main__":
     #ctx len 256
     parser.add_arguments(CacheConfig, dest="options")
     parser.add_argument("--sae_dir", type=str, default="../halutsae/sae-pkm/smollm")
+    parser.add_argument("--path", type=str)
     parser.add_argument("--model_name", type=str,
                         # default="pythia-160m"
                         default="SmolLM"
@@ -189,5 +221,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     cfg = args.options
     print(cfg)
-    
+
     main(cfg, args)

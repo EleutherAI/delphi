@@ -5,6 +5,7 @@ from simple_parsing import ArgumentParser
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from delphi.autoencoders.wrapper import AutoencoderLatents
 import numpy as np
+from pathlib import Path
 import torch
 from torch import nn
 import torch.distributed as dist
@@ -76,10 +77,8 @@ def main():
 
     submodule_dict = {}
 
-    save_dir = (
-        f"results/monet_cache{'_separate' if args.separate_moe else ''}/{args.size}"
-    )
-    processed_dir = f"results/monet_cache{'_separate' if args.separate_moe else ''}_converted/{args.size}"
+    save_dir = f"results/monet_cache{'_separate' if args.separate_moe else '_converted'}/{args.size}"
+    processed_dir = f"results/monet_cache_converted/{args.size}"
     new_submodules = False
     for layer in range(0, len(model.model.layers), model_config.moe_groups):
 
@@ -134,10 +133,14 @@ def main():
         batch_size=32,
     )
 
+    save_dir = Path(save_dir)
     with torch.inference_mode():
         cache.run(n_tokens=10_000_000, tokens=tokens, detuple_activations=False)
 
+    print("Saving cache to", save_dir)
+    print("Estimated size:", cache.estimate_size())
     cache.save_splits(n_splits=cfg.n_splits, save_dir=save_dir)
+    print("Saving config to", save_dir)
     cache.save_config(save_dir=save_dir, cfg=cfg, model_name=args.tokenizer_model)
 
 

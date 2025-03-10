@@ -44,6 +44,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+visualize = [
+    "ipywidgets",
+    "jupyterlab",
+    "notebook",
+    "ipython",
+    "ipykernel",
+    "html5lib",
+]
 
 [tool.pyright]
 include = ["delphi*"]
@@ -53,7 +61,8 @@ reportPrivateImportUsage = false
 include = ["delphi*"]
 
 [tool.uv.sources]
-sparsify = { path = "../halutsae", editable=true }
+# sparsify = { path = "../halutsae", editable=true }
+sparsify = { path = "../e2e", editable=true }
 
 [[tool.uv.index]]
 url = "https://flashinfer.ai/whl/cu124/torch2.5/flashinfer-python"
@@ -62,7 +71,7 @@ url = "https://flashinfer.ai/whl/cu124/torch2.5/flashinfer-python"
 # TODO: Clean up or remove experiments folder.
 exclude = [
     "experiments", "**/prompts/*", "**/prompts.py","**/simulator.py",
-    "examples"
+    "examples", "check_cossim.py", "wandb_plots.py"
 ]
 # Avoid automatically removing unused imports in __init__.py files.
 # Such imports will be flagged with a dedicated message suggesting
@@ -77,4 +86,4 @@ line-length = 88
 select = ["E", "F", "I"]
 
 [tool.black]
-force_exclude = "/examples/"
+force_exclude = "(/examples/|check_cossim)"

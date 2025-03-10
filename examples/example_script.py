@@ -125,8 +125,9 @@ async def main(args):
         return record
 
     def explainer_postprocess(result):
+        save_path = f"results/explanations/{sae_model}/{experiment_name}/{result.record.latent}.txt"
         with open(
-            f"results/explanations/{sae_model}/{experiment_name}/{result.record.latent}.txt",
+            save_path,
             "wb",
         ) as f:
             f.write(orjson.dumps(result.explanation))
