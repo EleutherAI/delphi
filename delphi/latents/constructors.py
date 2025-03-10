@@ -193,6 +193,10 @@ def constructor(
         raise ValueError(f"Invalid non-activating source: {source_non_activating}")
 
     record.not_active = non_activating_examples
+
+    if constructor_cfg.save_activation_data:
+        record.activation_data = activation_data
+
     return record
 
 

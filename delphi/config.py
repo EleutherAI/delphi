@@ -52,6 +52,9 @@ class ConstructorConfig(Serializable):
     ] = "co-occurrence"
     """Type of neighbours to use. Only used if non_activating_source is 'neighbours'."""
 
+    save_activation_data: bool = False
+    """Whether to keep the origianl activation data in the record."""
+
 
 @dataclass
 class CacheConfig(Serializable):

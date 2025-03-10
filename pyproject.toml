@@ -23,7 +23,9 @@ dependencies = [
     "vllm",
     "aiofiles",
     "sentence_transformers",
-    "anyio>=4.8.0"
+    "anyio>=4.8.0",
+    "sae-dashboard>=0.6.9",
+    "more-itertools>=10.6.0",
 ]
 
 [project.optional-dependencies]
