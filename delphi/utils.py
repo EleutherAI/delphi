@@ -41,4 +41,4 @@ def assert_type(typ: Type[T], obj: Any) -> T:
     if not isinstance(obj, typ):
         raise TypeError(f"Expected {typ.__name__}, got {type(obj).__name__}")
 
-    return cast(typ, obj)
+    return cast(typ, obj)  # type: ignore

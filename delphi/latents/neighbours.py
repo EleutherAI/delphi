@@ -179,7 +179,7 @@ class NeighbourCalculator:
         idx_cantor, idx_cantor_sorted_idx = idx_cantor.sort(dim=0, stable=True)
         latent_index = latent_index[idx_cantor_sorted_idx]
 
-        token_batch_size = 100_000
+        token_batch_size = 20_000
         co_occurrence_matrix = None
         done = False
         while not done:
@@ -203,10 +203,16 @@ class NeighbourCalculator:
                     (n_latents, n_latents), dtype=torch.int64
                 )
 
+                co_occurrence_matrix = torch.zeros(
+                    (n_latents, n_latents), dtype=torch.int32
+                )
+                # co_occurrence_matrix = co_occurrence_matrix.cuda()
+
                 for start, end in tqdm(
                     zip(batch_boundaries[:-1], batch_boundaries[1:])
                 ):
-                    # get all ind_cantor values between start and start
+                    # get all ind_cantor values between start
+                    # and start + token_batch_size
                     selected_idx_cantor = idx_cantor[start:end]
                     # shift the indices to start from 0
                     selected_idx_cantor = selected_idx_cantor - selected_idx_cantor[0]

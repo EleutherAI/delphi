@@ -280,6 +280,9 @@ def populate_cache(
     # Save firing counts to the run-specific log directory
     cache.save_firing_counts()
 
+    if run_cfg.verbose:
+        cache.generate_statistics_cache()
+
     cache.save_splits(
         # Split the activation and location indices into different files to make
         # loading faster

@@ -86,6 +86,12 @@ class TensorBuffer:
         Float[Tensor, "activations"],
         Float[Tensor, "batch seq"] | None,
     ]:
+        """Load the tensor buffer's data.
+
+        Returns:
+            Tuple[Tensor, Tensor, Optional[Tensor]]: Locations, activations,
+                and tokens (if present in the cache).
+        """
         split_data = load_file(self.path)
         first_latent = int(self.path.split("/")[-1].split("_")[0])
         activations = torch.tensor(split_data["activations"])
