@@ -9,8 +9,8 @@ from torch import Tensor
 
 def import_plotly():
     try:
-        import plotly.express as px
-        import plotly.io as pio
+        import plotly.express as px  # type: ignore
+        import plotly.io as pio  # type: ignore
     except ImportError:
         raise ImportError(
             "Plotly is not installed.\n"

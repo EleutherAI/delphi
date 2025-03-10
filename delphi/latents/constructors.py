@@ -1,7 +1,7 @@
 from typing import Optional
 
 import torch
-from jaxtyping import Float
+from jaxtyping import Bool, Float, Int
 from torch import Tensor
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -15,7 +15,7 @@ from .latents import (
 
 
 def prepare_non_activating_examples(
-    tokens: Float[Tensor, "examples ctx_len"],
+    tokens: Int[Tensor, "examples ctx_len"],
     distance: float,
     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
 ) -> list[NonActivatingExample]:
@@ -29,7 +29,7 @@ def prepare_non_activating_examples(
     return [
         NonActivatingExample(
             tokens=toks,
-            activations=torch.zeros_like(toks),
+            activations=torch.zeros_like(toks, dtype=torch.float),
             normalized_activations=None,
             distance=distance,
             str_tokens=tokenizer.batch_decode(toks),
@@ -41,14 +41,14 @@ def prepare_non_activating_examples(
 def _top_k_pools(
     max_buffer: Float[Tensor, "batch"],
     split_activations: Float[Tensor, "activations ctx_len"],
-    buffer_tokens: Float[Tensor, "batch ctx_len"],
+    buffer_tokens: Int[Tensor, "batch ctx_len"],
     max_examples: int,
-) -> tuple[Float[Tensor, "examples ctx_len"], Float[Tensor, "examples ctx_len"]]:
+) -> tuple[Int[Tensor, "examples ctx_len"], Float[Tensor, "examples ctx_len"]]:
     """
     Get the top k activation pools.
 
     Args:
-        max_buffer: The maximum buffer values.
+        max_buffer: The maxima of each context window's activations.
         split_activations: The split activations.
         buffer_tokens: The buffer tokens.
         max_examples: The maximum number of examples.
@@ -67,12 +67,12 @@ def _top_k_pools(
 
 def pool_max_activation_windows(
     activations: Float[Tensor, "examples"],
-    tokens: Float[Tensor, "windows seq"],
-    ctx_indices: Float[Tensor, "examples"],
-    index_within_ctx: Float[Tensor, "examples"],
+    tokens: Int[Tensor, "windows seq"],
+    ctx_indices: Int[Tensor, "examples"],
+    index_within_ctx: Int[Tensor, "examples"],
     ctx_len: int,
     max_examples: int,
-) -> tuple[Float[Tensor, "examples ctx_len"], Float[Tensor, "examples ctx_len"]]:
+) -> tuple[Int[Tensor, "examples ctx_len"], Float[Tensor, "examples ctx_len"]]:
     """
     Pool max activation windows from the buffer output and update the latent record.
 
@@ -83,6 +83,8 @@ def pool_max_activation_windows(
         index_within_ctx : The index within the context.
         ctx_len : The context length.
         max_examples : The maximum number of examples.
+    Returns:
+        The token windows and activation windows.
     """
     # unique_ctx_indices: array of distinct context window indices in order of first
     # appearance. sequential integers from 0 to batch_size * cache_token_length//ctx_len
@@ -113,7 +115,7 @@ def constructor(
     record: LatentRecord,
     activation_data: ActivationData,
     constructor_cfg: ConstructorConfig,
-    tokens: Float[Tensor, "batch seq"],
+    tokens: Int[Tensor, "batch seq"],
     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
     all_data: Optional[dict[int, ActivationData]] = None,
     seed: int = 42,
@@ -198,8 +200,8 @@ def constructor(
 
 def neighbour_non_activation_windows(
     record: LatentRecord,
-    not_active_mask: Float[Tensor, "windows"],
-    tokens: Float[Tensor, "batch seq"],
+    not_active_mask: Bool[Tensor, "windows"],
+    tokens: Int[Tensor, "batch seq"],
     all_data: dict[int, ActivationData],
     ctx_len: int,
     n_not_active: int,
@@ -289,8 +291,8 @@ def neighbour_non_activation_windows(
 
 
 def random_non_activating_windows(
-    available_indices: Float[Tensor, "windows"],
-    reshaped_tokens: Float[Tensor, "windows ctx_len"],
+    available_indices: Int[Tensor, "windows"],
+    reshaped_tokens: Int[Tensor, "windows ctx_len"],
     n_not_active: int,
     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
     seed: int = 42,
