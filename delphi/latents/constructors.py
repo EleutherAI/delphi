@@ -1,7 +1,14 @@
+import hashlib
+import os
+from collections import defaultdict
+from pathlib import Path
 from typing import Optional
 
+import faiss
+import numpy as np
 import torch
 from jaxtyping import Float
+from sentence_transformers import SentenceTransformer
 from torch import Tensor
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -12,6 +19,16 @@ from .latents import (
     LatentRecord,
     NonActivatingExample,
 )
+
+model = defaultdict(lambda: None)
+
+
+def get_model(name: str, device: str = "cuda") -> SentenceTransformer:
+    global model
+    if model[(name, device)] is None:
+        print(f"Loading model {name} on device {device}")
+        model[(name, device)] = SentenceTransformer(name, device=device)
+    return model[(name, device)]
 
 
 def prepare_non_activating_examples(
@@ -189,11 +206,228 @@ def constructor(
             seed=seed,
             tokenizer=tokenizer,
         )
-    else:
-        raise ValueError(f"Invalid non-activating source: {source_non_activating}")
-
+    elif source_non_activating == "FAISS":
+        non_activating_examples = faiss_non_activation_windows(
+            available_indices=non_active_indices,
+            record=record,
+            tokens=tokens,
+            ctx_len=example_ctx_len,
+            tokenizer=tokenizer,
+            n_not_active=n_not_active,
+            embedding_model=constructor_cfg.faiss_embedding_model,
+            seed=seed,
+            cache_enabled=constructor_cfg.faiss_embedding_cache_enabled,
+            cache_dir=constructor_cfg.faiss_embedding_cache_dir,
+        )
     record.not_active = non_activating_examples
     return record
+
+
+def create_token_key(tokens_tensor, ctx_len):
+    """
+    Create a file key based on token tensors without detokenization.
+
+    Args:
+        tokens_tensor: Tensor of tokens
+        ctx_len: Context length
+
+    Returns:
+        A string key
+    """
+    h = hashlib.md5()
+    total_tokens = 0
+
+    # Process a sample of elements (first, middle, last)
+    num_samples = len(tokens_tensor)
+    indices_to_hash = (
+        [0, num_samples // 2, -1] if num_samples >= 3 else range(num_samples)
+    )
+
+    for idx in indices_to_hash:
+        if 0 <= idx < num_samples or (idx == -1 and num_samples > 0):
+            # Convert tensor to bytes and hash it
+            token_bytes = tokens_tensor[idx].cpu().numpy().tobytes()
+            h.update(token_bytes)
+            total_tokens += len(tokens_tensor[idx])
+
+    # Add collection shape to make collisions less likely
+    shape_str = f"{tokens_tensor.shape}"
+    h.update(shape_str.encode())
+
+    return f"{h.hexdigest()[:12]}_items{num_samples}_{ctx_len}"
+
+
+def faiss_non_activation_windows(
+    available_indices: Float[Tensor, "windows"],
+    record: LatentRecord,
+    tokens: Float[Tensor, "batch seq"],
+    ctx_len: int,
+    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+    n_not_active: int,
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+    seed: int = 42,
+    cache_enabled: bool = True,
+    cache_dir: str = ".embedding_cache",
+) -> list[NonActivatingExample]:
+    """
+    Generate hard negative examples using FAISS similarity search based
+    on text embeddings.
+
+    This function builds a FAISS index over non-activating examples and
+    finds examples that are semantically similar to the activating examples
+    based on text embeddings.
+
+    Args:
+        available_indices: Indices of windows where the latent is not active
+        record: The latent record containing activating examples
+        tokens: The input tokens
+        ctx_len: The context length for examples
+        tokenizer: The tokenizer to decode tokens
+        n_not_active: Number of non-activating examples to generate
+        embedding_model: Model used for text embeddings
+        seed: Random seed
+        cache_enabled: Whether to cache embeddings
+        cache_dir: Directory to store cached embeddings
+
+    Returns:
+        A list of non-activating examples that are semantically similar to
+            activating examples
+    """
+    torch.manual_seed(seed)
+    if n_not_active == 0:
+        return []
+
+    # Check if we have enough non-activating examples
+    if available_indices.numel() < n_not_active:
+        print("Not enough non-activating examples available")
+        return []
+
+    # Reshape tokens to get context windows
+    reshaped_tokens = tokens.reshape(-1, ctx_len)
+
+    # Get non-activating token windows
+    non_activating_tokens = reshaped_tokens[available_indices]
+
+    # Define cache directory structure
+    cache_dir = Path(os.environ.get("DELPHI_CACHE_DIR", cache_dir))
+    embedding_model_name = embedding_model.split("/")[-1]
+    cache_path = cache_dir / embedding_model_name
+
+    # Get activating example texts
+    activating_texts = [
+        "".join(example.str_tokens)
+        for example in record.examples[: min(10, len(record.examples))]
+    ]
+
+    if not activating_texts:
+        print("No activating examples available")
+        return []
+
+    # Create unique cache keys for both activating and non-activating texts
+    # Use the hash of the concatenated texts to ensure uniqueness
+    non_activating_cache_key = create_token_key(non_activating_tokens, ctx_len)
+    activating_cache_key = create_token_key(
+        torch.stack(
+            [
+                example.tokens
+                for example in record.examples[: min(10, len(record.examples))]
+            ]
+        ),
+        ctx_len,
+    )
+
+    # Cache files for activating and non-activating embeddings
+    non_activating_cache_file = cache_path / f"{non_activating_cache_key}.faiss"
+    activating_cache_file = cache_path / f"{activating_cache_key}.npy"
+
+    # Try to load cached non-activating embeddings
+    index = None
+    if cache_enabled and non_activating_cache_file.exists():
+        try:
+            index = faiss.read_index(str(non_activating_cache_file), faiss.IO_FLAG_MMAP)
+            print(f"Loaded non-activating index from {non_activating_cache_file}")
+        except Exception as e:
+            print(f"Error loading cached embeddings: {e}")
+
+    if index is None:
+        print("Decoding non-activating tokens...")
+        non_activating_texts = [
+            "".join(tokenizer.batch_decode(tokens)) for tokens in non_activating_tokens
+        ]
+
+        print("Computing non-activating embeddings...")
+        non_activating_embeddings = get_model(embedding_model).encode(
+            non_activating_texts, show_progress_bar=False
+        )
+        dim = non_activating_embeddings.shape[1]
+        index = faiss.IndexFlatL2(dim)
+
+        index.add(non_activating_embeddings)
+        if cache_enabled:
+            os.makedirs(cache_path, exist_ok=True)
+            faiss.write_index(index, str(non_activating_cache_file))
+            print(f"Cached non-activating embeddings to {non_activating_cache_file}")
+
+    activating_embeddings = None
+    if cache_enabled and activating_cache_file.exists():
+        try:
+            activating_embeddings = np.load(activating_cache_file)
+            print(f"Loaded cached activating embeddings from {activating_cache_file}")
+        except Exception as e:
+            print(f"Error loading cached embeddings: {e}")
+    # Compute embeddings for activating examples if not cached
+    if activating_embeddings is None:
+        print("Computing activating embeddings...")
+        activating_embeddings = get_model(embedding_model).encode(
+            activating_texts, show_progress_bar=False
+        )
+        # Cache the embeddings
+        if cache_enabled:
+            os.makedirs(cache_path, exist_ok=True)
+            np.save(activating_cache_file, activating_embeddings)
+            print(f"Cached activating embeddings to {activating_cache_file}")
+
+    # Search for the nearest neighbors to each activating example
+    collected_indices = set()
+    hard_negative_indices = []
+
+    # For each activating example, find the closest non-activating examples
+    for embedding in activating_embeddings:
+        # Skip if we already have enough examples
+        if len(hard_negative_indices) >= n_not_active:
+            break
+
+        # Search for similar non-activating examples
+        distances, indices = index.search(embedding.reshape(1, -1), n_not_active)
+
+        # Add new indices that haven't been collected yet
+        for idx in indices[0]:
+            if (
+                idx not in collected_indices
+                and len(hard_negative_indices) < n_not_active
+            ):
+                hard_negative_indices.append(idx)
+                collected_indices.add(idx)
+
+    # If we don't have enough hard negatives, add some random ones
+    if len(hard_negative_indices) < n_not_active:
+        remaining = n_not_active - len(hard_negative_indices)
+        available_indices_set = (
+            set(range(len(non_activating_embeddings))) - collected_indices
+        )
+        if available_indices_set:
+            random_indices = torch.tensor(list(available_indices_set))[
+                torch.randperm(len(available_indices_set))[:remaining]
+            ]
+            hard_negative_indices.extend(random_indices.tolist())
+    # Get the token windows for the selected hard negatives
+    selected_tokens = non_activating_tokens[hard_negative_indices]
+    # Create non-activating examples
+    return prepare_non_activating_examples(
+        selected_tokens,
+        -1.0,  # Using -1.0 as the distance since these are not neighbour-based
+        tokenizer,
+    )
 
 
 def neighbour_non_activation_windows(

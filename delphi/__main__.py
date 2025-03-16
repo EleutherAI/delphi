@@ -19,7 +19,7 @@ from transformers import (
 
 from delphi.clients import Offline, OpenRouter
 from delphi.config import RunConfig
-from delphi.explainers import DefaultExplainer
+from delphi.explainers import ContrastiveExplainer, DefaultExplainer
 from delphi.latents import LatentCache, LatentDataset
 from delphi.latents.neighbours import NeighbourCalculator
 from delphi.log.result_analysis import log_results
@@ -171,19 +171,29 @@ async def process_cache(
     def explainer_postprocess(result):
         with open(explanations_path / f"{result.record.latent}.txt", "wb") as f:
             f.write(orjson.dumps(result.explanation))
+
         return result
 
-    explainer_pipe = process_wrapper(
-        DefaultExplainer(
+    if run_cfg.constructor_cfg.non_activating_source == "FAISS":
+        explainer = ContrastiveExplainer(
             client,
             threshold=0.3,
             verbose=run_cfg.verbose,
-        ),
-        postprocess=explainer_postprocess,
-    )
+        )
+    else:
+        explainer = DefaultExplainer(
+            client,
+            threshold=0.3,
+            verbose=run_cfg.verbose,
+        )
+
+    explainer_pipe = Pipe(process_wrapper(explainer, postprocess=explainer_postprocess))
 
     # Builds the record from result returned by the pipeline
     def scorer_preprocess(result):
+        if isinstance(result, list):
+            result = result[0]
+
         record = result.record
         record.explanation = result.explanation
         record.extra_examples = record.not_active

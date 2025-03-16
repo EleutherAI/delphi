@@ -285,7 +285,9 @@ class LatentCache:
                                     firing_counts.cpu()
                                 )
                             else:
-                                self.hookpoint_firing_counts[hookpoint] += firing_counts.cpu()
+                                self.hookpoint_firing_counts[
+                                    hookpoint
+                                ] += firing_counts.cpu()
 
                 # Update the progress bar
                 pbar.update(1)

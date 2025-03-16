@@ -32,6 +32,8 @@ async def test():
         example_ctx_len=32,
         n_non_activating=50,
         non_activating_source="random",
+        faiss_embedding_cache_enabled=True,
+        faiss_embedding_cache_dir=".embedding_cache",
     )
     run_cfg = RunConfig(
         name="test",

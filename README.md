@@ -24,7 +24,7 @@ This command will:
 3. Score the explanations uses fuzzing and detection scorers.
 4. Log summary metrics including per-scorer F1 scores and confusion matrices, and produce histograms of the scorer classification accuracies.
 
-The pipeline is highly configurable and can also be called programmatically (see the [end-to-end test](https://github.com/EleutherAI/delphi/blob/main/delphi/tests/e2e.py) for an example). 
+The pipeline is highly configurable and can also be called programmatically (see the [end-to-end test](https://github.com/EleutherAI/delphi/blob/main/delphi/tests/e2e.py) for an example).
 
 To use other scorer types, instantiate a custom pipeline. You can take inspiration on the main pipeline in [delphi.__main__](https://github.com/EleutherAI/delphi/blob/main/delphi/__main__.py).
 
@@ -83,6 +83,44 @@ dataset = LatentDataset(
     constructor_cfg=constructor_cfg,
     latents=latent_dict,
     tokenizer=tokenizer
+)
+```
+
+### FAISS Index for Hard Negatives
+
+When constructing features for explanation, you can use FAISS (semantic similarity search) to create hard negative examples. Hard negatives are non-activating examples that are semantically similar to activating examples. This approach:
+
+1. Creates embeddings for both activating and non-activating examples using the specified embedding model
+2. Builds a FAISS index for efficient similarity search
+3. Finds non-activating examples that are semantically similar to activating examples
+4. Optionally caches embeddings to speed up future runs
+
+To use FAISS for hard negatives, set the `non_activating_source` parameter to "FAISS" in your `ConstructorConfig`:
+
+```python
+from delphi.config import ConstructorConfig
+
+constructor_cfg = ConstructorConfig(
+    non_activating_source="FAISS",
+    faiss_embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+    faiss_embedding_cache_enabled=True,
+    faiss_embedding_cache_dir=".embedding_cache"
+)
+```
+
+### Contrastive Explainer
+
+The `ContrastiveExplainer` adds both positive (activating) and negative (non-activating) examples to a single explainer prompt so the explainer model is less likely to label features that are not exclusive to the feature activations (ie we are more likely to provide non activating tokens which are semantically similar). This explainer is automatically used when the `non_activating_source` is set to "FAISS".
+
+```python
+from delphi.explainers import ContrastiveExplainer
+
+explainer = ContrastiveExplainer(
+    client,
+    threshold=0.3,
+    max_examples=15,
+    max_non_activating=5,
+    verbose=True
 )
 ```
 

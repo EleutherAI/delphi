@@ -37,6 +37,19 @@ You will be given a list of text examples on which special words are selected an
 {prompt}
 """
 
+SYSTEM_CONTRASTIVE = """You are a meticulous AI researcher conducting an important investigation into patterns found in language. Your task is to analyze text and provide an explanation that thoroughly encapsulates possible patterns found in it.
+Guidelines:
+
+You will be given a list of text examples on which special words are selected and between delimiters like <<this>>. If a sequence of consecutive tokens all are important, the entire sequence of tokens will be contained between delimiters <<just like this>>. How important each token is for the behavior is listed after each example in parentheses.
+
+- Try to produce a concise final description. Simply describe the text latents that are common in the examples, and what patterns you found.
+- Counterexamples where no special words are present are also provided to help you understand the patterns' edge cases.
+- If the examples are uninformative, you don't need to mention them. Don't focus on giving examples of important tokens, but try to summarize the patterns found in the examples.
+- Do not mention the marker tokens (<< >>) in your explanation.
+- Do not make lists of possible explanations. Keep your explanations short and concise.
+- The last line of your response must be the formatted explanation, using [EXPLANATION]:
+"""
+
 
 COT = """
 To better find the explanation for the language patterns go through the following stages:
@@ -228,3 +241,7 @@ def system(cot=False):
 
 def system_single_token():
     return [{"role": "system", "content": SYSTEM_SINGLE_TOKEN}]
+
+
+def system_contrastive():
+    return [{"role": "system", "content": SYSTEM_CONTRASTIVE}]
