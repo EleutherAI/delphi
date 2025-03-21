@@ -146,6 +146,9 @@ class LatentRecord:
     extra_examples: Optional[list[Example]] = None
     """Extra examples to include in the record."""
 
+    activation_data: Optional[ActivationData] = None
+    """Activation data for the latent, if it was saved."""
+
     @property
     def max_activation(self) -> float:
         """
