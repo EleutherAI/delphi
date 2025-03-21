@@ -131,7 +131,7 @@ async def process_cache(
         }  # The latent range to explain
 
     dataset = LatentDataset(
-        raw_dir=str(latents_path),
+        raw_dir=latents_path,
         sampler_cfg=run_cfg.sampler_cfg,
         constructor_cfg=run_cfg.constructor_cfg,
         modules=hookpoints,

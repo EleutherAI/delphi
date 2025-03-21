@@ -1,4 +1,4 @@
-from typing import Any, Type, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -36,7 +36,7 @@ def load_tokenized_data(
 T = TypeVar("T")
 
 
-def assert_type(typ: Type[T], obj: Any) -> T:
+def assert_type(typ: type[T], obj: Any) -> T:
     """Assert that an object is of a given type at runtime and return it."""
     if not isinstance(obj, typ):
         raise TypeError(f"Expected {typ.__name__}, got {type(obj).__name__}")

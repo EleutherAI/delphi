@@ -6,8 +6,9 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from collections.abc import Sequence
 from enum import Enum
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 from pydantic import BaseModel

@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "pytest-beartype", "pytest-asyncio", "setuptools", "pre-commit"]
 visualize = [
     "kaleido==0.2.1",
     "plotly>=5.0.0rc2",
@@ -55,3 +55,6 @@ line-length = 88
 # Enable pycodestyle (`E`), Pyflakes (`F`), and isort (`I`) codes
 # See https://beta.ruff.rs/docs/rules/ for more possible rules
 select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+beartype_packages = "delphi"

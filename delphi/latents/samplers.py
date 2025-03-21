@@ -68,8 +68,9 @@ def train(
                 logger.warning(
                     "n_train is greater than the number of examples, using all examples"
                 )
-
-            selected_examples = random.sample(examples, n_train)
+                selected_examples = examples
+            else:
+                selected_examples = random.sample(examples, n_train)
             selected_examples = normalize_activations(selected_examples, max_activation)
             return selected_examples
         case "quantiles":

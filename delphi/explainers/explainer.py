@@ -8,7 +8,7 @@ from typing import NamedTuple
 
 import aiofiles
 
-from ..clients.client import Client
+from ..clients.client import Client, Response
 from ..latents.latents import ActivatingExample, LatentRecord
 from ..logger import logger
 
@@ -44,6 +44,7 @@ class Explainer(ABC):
         response = await self.client.generate(
             messages, temperature=self.temperature, **self.generation_kwargs
         )
+        assert isinstance(response, Response)
 
         try:
             explanation = self.parse_explanation(response.text)

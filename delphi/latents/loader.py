@@ -7,7 +7,7 @@ from typing import Optional
 
 import numpy as np
 import torch
-from jaxtyping import Float
+from jaxtyping import Float, Int
 from safetensors.numpy import load_file
 from torch import Tensor
 from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
@@ -34,10 +34,10 @@ class TensorBuffer:
     module_path: str
     """Path of the module."""
 
-    latents: Optional[Float[Tensor, "num_latents"]] = None
+    latents: Optional[Int[Tensor, "num_latents"]] = None
     """Tensor of latent indices."""
 
-    _tokens: Optional[Float[Tensor, "batch seq"]] = None
+    _tokens: Optional[Int[Tensor, "batch seq"]] = None
     """Tensor of tokens."""
 
     def __iter__(self):
@@ -60,7 +60,7 @@ class TensorBuffer:
             )
 
     @property
-    def tokens(self) -> Float[Tensor, "batch seq"] | None:
+    def tokens(self) -> Int[Tensor, "batch seq"] | None:
         if self._tokens is None:
             self._tokens = self.load_tokens()
         return self._tokens
@@ -82,15 +82,14 @@ class TensorBuffer:
     def load(
         self,
     ) -> tuple[
-        Float[Tensor, "locations 2"],
+        Int[Tensor, "locations 3"],
         Float[Tensor, "activations"],
-        Float[Tensor, "batch seq"] | None,
+        Int[Tensor, "batch seq"] | None,
     ]:
-        """Load the tensor buffer's data.
+        """Load stored tensor buffer data.
 
         Returns:
-            Tuple[Tensor, Tensor, Optional[Tensor]]: Locations, activations,
-                and tokens (if present in the cache).
+            Tuple[Tensor, Tensor, Optional[Tensor]]: Locations, activations, and tokens.
         """
         split_data = load_file(self.path)
         first_latent = int(self.path.split("/")[-1].split("_")[0])
@@ -110,7 +109,7 @@ class TensorBuffer:
 
         return locations, activations, tokens
 
-    def load_tokens(self) -> Float[Tensor, "batch seq"] | None:
+    def load_tokens(self) -> Int[Tensor, "batch seq"] | None:
         _, _, tokens = self.load()
         return tokens
 
@@ -122,7 +121,7 @@ class LatentDataset:
 
     def __init__(
         self,
-        raw_dir: str,
+        raw_dir: os.PathLike,
         sampler_cfg: SamplerConfig,
         constructor_cfg: ConstructorConfig,
         tokenizer: Optional[PreTrainedTokenizer | PreTrainedTokenizerFast] = None,
@@ -181,8 +180,7 @@ class LatentDataset:
 
         if self.constructor_cfg.non_activating_source == "neighbours":
             # path is always going to end with /latents
-            split_path = raw_dir.split("/")[:-1]
-            neighbours_path = "/".join(split_path) + "/neighbours"
+            neighbours_path = Path(raw_dir).parent / "neighbours"
             self.neighbours = self.load_neighbours(
                 neighbours_path, self.constructor_cfg.neighbours_type
             )
@@ -215,16 +213,16 @@ class LatentDataset:
             )
         return self.tokens
 
-    def load_neighbours(self, neighbours_path: str, neighbours_type: str):
+    def load_neighbours(self, neighbours_path: Path, neighbours_type: str):
         neighbours = {}
         for hookpoint in self.modules:
             with open(
-                neighbours_path + f"/{hookpoint}-{neighbours_type}.json", "r"
+                neighbours_path / f"{hookpoint}-{neighbours_type}.json", "r"
             ) as f:
                 neighbours[hookpoint] = json.load(f)
         return neighbours
 
-    def _edges(self, raw_dir: str, module: str) -> list[tuple[int, int]]:
+    def _edges(self, raw_dir: os.PathLike, module: str) -> list[tuple[int, int]]:
         module_dir = Path(raw_dir) / module
         safetensor_files = [f for f in module_dir.glob("*.safetensors")]
         edges = []
@@ -234,12 +232,12 @@ class LatentDataset:
         edges.sort(key=lambda x: x[0])
         return edges
 
-    def _build(self, raw_dir: str):
+    def _build(self, raw_dir: os.PathLike):
         """
         Build dataset buffers which load all cached latents.
 
         Args:
-            raw_dir (str): Directory containing raw latent data.
+            raw_dir (os.PathLike): Directory containing raw latent data.
             modules (Optional[list[str]]): list of module names to include.
         """
 
@@ -256,14 +254,14 @@ class LatentDataset:
 
     def _build_selected(
         self,
-        raw_dir: str,
+        raw_dir: os.PathLike,
         latents: dict[str, torch.Tensor],
     ):
         """
         Build a dataset buffer which loads only selected latents.
 
         Args:
-            raw_dir (str): Directory containing raw latent data.
+            raw_dir (os.PathLike): Directory containing raw latent data.
             latents (dict[str, Union[int, torch.Tensor]]): Dictionary of latents
                 per module.
         """
@@ -306,7 +304,7 @@ class LatentDataset:
         """Return the number of buffers in the dataset."""
         return len(self.buffers)
 
-    def _load_all_data(self, raw_dir: str, modules: list[str]):
+    def _load_all_data(self, raw_dir: os.PathLike, modules: list[str]):
         """For each module, load all locations and activations"""
         all_data = {}
         for buffer in self.buffers:
