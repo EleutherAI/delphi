@@ -86,6 +86,44 @@ dataset = LatentDataset(
 )
 ```
 
+### FAISS Index for Hard Negatives
+
+When constructing features for explanation, you can use FAISS (semantic similarity search) to create hard negative examples. Hard negatives are non-activating examples that are semantically similar to activating examples. This approach:
+
+1. Creates embeddings for both activating and non-activating examples using the specified embedding model
+2. Builds a FAISS index for efficient similarity search
+3. Finds non-activating examples that are semantically similar to activating examples
+4. Optionally caches embeddings to speed up future runs
+
+To use FAISS for hard negatives, set the `non_activating_source` parameter to "FAISS" in your `ConstructorConfig`:
+
+```python
+from delphi.config import ConstructorConfig
+
+constructor_cfg = ConstructorConfig(
+    non_activating_source="FAISS",
+    faiss_embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+    faiss_embedding_cache_enabled=True,
+    faiss_embedding_cache_dir=".embedding_cache"
+)
+```
+
+### Contrastive Explainer
+
+The `ContrastiveExplainer` adds both positive (activating) and negative (non-activating) examples to a single explainer prompt so the explainer model is less likely to label features that are not exclusive to the feature activations (ie we are more likely to provide non activating tokens which are semantically similar). This explainer is automatically used when the `non_activating_source` is set to "FAISS".
+
+```python
+from delphi.explainers import ContrastiveExplainer
+
+explainer = ContrastiveExplainer(
+    client,
+    threshold=0.3,
+    max_examples=15,
+    max_non_activating=5,
+    verbose=True
+)
+```
+
 ## Generating Explanations
 
 We currently support using OpenRouter's OpenAI compatible API or running locally with VLLM. Define the client you want to use, then create an explainer from the `.explainers` module.
