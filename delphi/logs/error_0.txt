@@ -1,0 +1,37 @@
++ source /home/fdraye/.bashrc
+++ case $- in
+++ return
++ export HOME=/lustre/home/fdraye
++ HOME=/lustre/home/fdraye
++ echo 'Home set to:' /lustre/home/fdraye
++ export WANDB_API_KEY=097e21df11c8e16d3452a3e5747add10ec3ed5e0
++ WANDB_API_KEY=097e21df11c8e16d3452a3e5747add10ec3ed5e0
++ cd /lustre/home/fdraye/projects/hdelphi
+++ pwd
++ echo 'In directory:' /lustre/home/fdraye/projects/hdelphi
++ source .venv/bin/activate
+++ deactivate nondestructive
+++ '[' -n '' ']'
+++ '[' -n '' ']'
+++ '[' -n /bin/bash -o -n '' ']'
+++ hash -r
+++ '[' -n '' ']'
+++ unset VIRTUAL_ENV
+++ unset VIRTUAL_ENV_PROMPT
+++ '[' '!' nondestructive = nondestructive ']'
+++ VIRTUAL_ENV=/lustre/home/fdraye/projects/hdelphi/.venv
+++ export VIRTUAL_ENV
+++ _OLD_VIRTUAL_PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+++ PATH=/lustre/home/fdraye/projects/hdelphi/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+++ export PATH
+++ '[' -n '' ']'
+++ '[' -z '' ']'
+++ _OLD_VIRTUAL_PS1=
+++ PS1='(.venv) '
+++ export PS1
+++ VIRTUAL_ENV_PROMPT='(.venv) '
+++ export VIRTUAL_ENV_PROMPT
+++ '[' -n /bin/bash -o -n '' ']'
+++ hash -r
++ cd delphi
++ python hsae_test.py

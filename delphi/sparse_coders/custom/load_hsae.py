@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from safetensors.torch import load_file
+from pathlib import Path
 
 """
 - model_path should be a path to the repository with the weights
@@ -64,10 +65,10 @@ class HSae(nn.Module):
         self.b_enc_h = nn.Parameter(torch.zeros(d_sae_h))
         self.b_dec_h = nn.Parameter(torch.zeros(d_model))
 
-        self.A = self.encode_h(self.W_enc)
+        self.A = self.encode_h(self.W_dec)
 
-    def update_A(self): 
-        self.A = self.encode_h(self.W_enc)
+    def update_A(self, device="cuda"): 
+        self.A = self.encode_h(self.W_dec).to(device)
 
     def encode(self, input_acts):
         pre_acts = (input_acts - self.b_dec) @ self.W_enc + self.b_enc
@@ -85,9 +86,12 @@ class HSae(nn.Module):
     def encode_concatenate(self, input_acts): 
         # acts has shape (batch_size, d_sae)
         acts = self.encode(input_acts)
+        print(acts.shape)
         # A has shape (d_sae, d_sae_h)
         output = acts @ self.A
-        return torch.cat((acts, output), dim=1)
+        print(self.A.shape)
+        print(output.shape)
+        return torch.cat((acts, output), dim=2)
 
     def encode_h(self, input_acts):
         pre_acts = (input_acts - self.b_dec_h) @ self.W_enc_h + self.b_enc_h
@@ -105,10 +109,11 @@ class HSae(nn.Module):
 
     @classmethod
     def from_pretrained(cls, model_name_or_path, device):
-        params = load_file(model_name_or_path + "/sae_weights.safetensors")
+        print(model_name_or_path / "sae_weights.safetensors")
+        params = load_file(model_name_or_path / "sae_weights.safetensors")
         model = cls(params["W_enc"].shape[0], params["W_enc"].shape[1], params["W_enc_h"].shape[1])
         model.load_state_dict(params)
-        model.update_A()
+        model.update_A(device)
         if device == "cuda":
             model.cuda()
         return model

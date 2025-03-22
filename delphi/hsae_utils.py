@@ -35,8 +35,7 @@ def populate_cache(
     model: PreTrainedModel,
     hookpoint_to_sparse_encode: dict[str, Callable],
     latents_path: Path,
-    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
-    transcode: bool,
+    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast
 ):
     """
     Populates an on-disk cache in `latents_path` with SAE latent activations.
@@ -73,7 +72,6 @@ def populate_cache(
         model,
         hookpoint_to_sparse_encode,
         batch_size=cache_cfg.batch_size,
-        transcode=transcode,
         log_path=log_path,
     )
     cache.run(cache_cfg.n_tokens, tokens)
@@ -93,6 +91,31 @@ def populate_cache(
     cache.save_config(save_dir=latents_path, cfg=cache_cfg, model_name=run_cfg.model)
 
 
+
+# def load_tokenized_data(
+#     ctx_len: int,
+#     tokenizer: AutoTokenizer,
+#     dataset_repo: str,
+#     dataset_split: str,
+#     dataset_name: str = "",
+#     seed: int = 22,
+# ):
+#     """
+#     Load a huggingface dataset, tokenize it, and shuffle using transformer_lens
+#     """
+#     from datasets import load_dataset
+#     from transformer_lens import utils
+#     print(dataset_repo,dataset_name,dataset_split)
+#     data = load_dataset(dataset_repo, name=dataset_name, split=dataset_split)
+#     if "rpj" in dataset_repo:
+#         tokens = utils.tokenize_and_concatenate(data, tokenizer, max_length=ctx_len,column_name="raw_content")
+#     else:
+#         tokens = utils.tokenize_and_concatenate(data, tokenizer, max_length=ctx_len,column_name="text")
+
+#     tokens = tokens.shuffle(seed)["tokens"]
+
+#     return tokens
+
 def load_tokenized_data(
     ctx_len: int,
     tokenizer: AutoTokenizer,
@@ -102,7 +125,7 @@ def load_tokenized_data(
     seed: int = 22,
 ):
     """
-    Load a huggingface dataset, tokenize it, and shuffle using transformer_lens
+    Load a huggingface dataset, tokenize it, and shuffle.
     """
     from datasets import load_dataset
     from transformer_lens import utils

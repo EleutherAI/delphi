@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from sparsify import SparseCoder
 from transformers import PreTrainedModel
-
+from pathlib import Path
 from delphi.config import RunConfig
 
 from .custom.gemmascope import load_gemma_hooks
@@ -41,14 +41,15 @@ def load_hooks_sparse_coders(
         # the name of the hookpoint should be for eg. blocks.8.hook_resid_post
 
         # TODO: has to be more general
-        model_path = "../checkpoints/hsae/" + run_cfg.sparse_model
+        model_path = Path.cwd() / "checkpoints" / "hsae" / run_cfg.sparse_model
 
         hookpoint_to_sparse_encode = load_hsae_hooks(
             model_path=model_path,
             hookpoint=hookpoint,
-            dtype=model.dtype,
-            device=model.device,
+            dtype=model.cfg.dtype,
+            device=model.cfg.device,
         )
+        transcode = False
     elif "gemma" not in run_cfg.sparse_model:
         hookpoint_to_sparse_encode, transcode = load_sparsify_hooks(
             model,

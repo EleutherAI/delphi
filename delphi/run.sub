@@ -1,0 +1,17 @@
+universe = vanilla
+
+executable = /lustre/home/fdraye/projects/hdelphi/delphi/run_job.sh
+
+initialdir = /lustre/home/fdraye/projects/hdelphi/delphi
+
+output = /lustre/home/fdraye/projects/hdelphi/delphi/logs/output_$(Process).txt
+error = /lustre/home/fdraye/projects/hdelphi/delphi/logs/error_$(Process).txt
+log = /lustre/home/fdraye/projects/hdelphi/delphi/logs/job.log
+
+request_cpus = 2
+request_memory = 80GB
+request_GPUs = 1
+require_gpus = Capability >= 8.0
+
+# Use the generated params.txt file for all combinations
+queue 

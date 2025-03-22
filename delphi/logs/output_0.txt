@@ -1,0 +1,3 @@
+Home set to: /lustre/home/fdraye
+In directory: /lustre/home/fdraye/projects/hdelphi
+INFO 03-22 19:29:09 [__init__.py:256] Automatically detected platform cuda.

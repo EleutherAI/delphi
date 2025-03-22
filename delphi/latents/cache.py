@@ -271,7 +271,7 @@ class LatentCache:
                         list(self.hookpoint_to_sparse_encode.keys()),
                         self.transcode,
                     ) as activations:
-                        self.model(batch.to(self.model.device))
+                        self.model(batch.to(self.model.cfg.device))
 
                         for hookpoint, latents in activations.items():
                             sae_latents = self.hookpoint_to_sparse_encode[hookpoint](
