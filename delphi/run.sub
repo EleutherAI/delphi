@@ -14,4 +14,4 @@ request_GPUs = 1
 require_gpus = Capability >= 8.0
 
 # Use the generated params.txt file for all combinations
-queue 
+queue

@@ -1,15 +1,17 @@
+from pathlib import Path
 from typing import Callable
 
 import torch
 import torch.nn as nn
 from sparsify import SparseCoder
 from transformers import PreTrainedModel
-from pathlib import Path
+
 from delphi.config import RunConfig
 
 from .custom.gemmascope import load_gemma_hooks
 from .custom.load_hsae import load_hsae_hooks
 from .load_sparsify import load_sparsify_hooks, load_sparsify_sparse_coders
+
 
 def load_hooks_sparse_coders(
     model: PreTrainedModel,
@@ -33,8 +35,8 @@ def load_hooks_sparse_coders(
     """
 
     # Add SAE hooks to the model
-    if "hsae" in run_cfg.sparse_model: 
-        # there should only be one hookpoint 
+    if "hsae" in run_cfg.sparse_model:
+        # there should only be one hookpoint
         assert len(run_cfg.hookpoints) == 1
         hookpoint = run_cfg.hookpoints[0]
 

@@ -1,41 +1,24 @@
-import asyncio
-import os
-from functools import partial
 from pathlib import Path
 from typing import Callable
 
-import orjson
 import torch
-from simple_parsing import ArgumentParser
-from torch import Tensor
 from transformers import (
-    AutoModel,
     AutoTokenizer,
-    BitsAndBytesConfig,
     PreTrainedModel,
     PreTrainedTokenizer,
     PreTrainedTokenizerFast,
 )
 
-from delphi.clients import Offline, OpenRouter
 from delphi.config import RunConfig
-from delphi.explainers import DefaultExplainer
-from delphi.latents import LatentCache, LatentDataset
-from delphi.latents.neighbours import NeighbourCalculator
-from delphi.log.result_analysis import log_results
-from delphi.pipeline import Pipe, Pipeline, process_wrapper
-from delphi.scorers import DetectionScorer, FuzzingScorer
-from delphi.sparse_coders import load_hooks_sparse_coders, load_sparse_coders
-from delphi.utils import assert_type
-from delphi.config import CacheConfig, ConstructorConfig, RunConfig, SamplerConfig
-from sae_lens import SAE, HookedSAETransformer
+from delphi.latents import LatentCache
+
 
 def populate_cache(
     run_cfg: RunConfig,
     model: PreTrainedModel,
     hookpoint_to_sparse_encode: dict[str, Callable],
     latents_path: Path,
-    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast
+    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
 ):
     """
     Populates an on-disk cache in `latents_path` with SAE latent activations.
@@ -91,7 +74,6 @@ def populate_cache(
     cache.save_config(save_dir=latents_path, cfg=cache_cfg, model_name=run_cfg.model)
 
 
-
 # def load_tokenized_data(
 #     ctx_len: int,
 #     tokenizer: AutoTokenizer,
@@ -116,6 +98,7 @@ def populate_cache(
 
 #     return tokens
 
+
 def load_tokenized_data(
     ctx_len: int,
     tokenizer: AutoTokenizer,
@@ -129,12 +112,17 @@ def load_tokenized_data(
     """
     from datasets import load_dataset
     from transformer_lens import utils
-    print(dataset_repo,dataset_name,dataset_split)
+
+    print(dataset_repo, dataset_name, dataset_split)
     data = load_dataset(dataset_repo, name=dataset_name, split=dataset_split)
     if "rpj" in dataset_repo:
-        tokens = utils.tokenize_and_concatenate(data, tokenizer, max_length=ctx_len,column_name="raw_content")
+        tokens = utils.tokenize_and_concatenate(
+            data, tokenizer, max_length=ctx_len, column_name="raw_content"
+        )
     else:
-        tokens = utils.tokenize_and_concatenate(data, tokenizer, max_length=ctx_len,column_name="text")
+        tokens = utils.tokenize_and_concatenate(
+            data, tokenizer, max_length=ctx_len, column_name="text"
+        )
 
     tokens = tokens.shuffle(seed)["tokens"]
 

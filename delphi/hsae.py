@@ -1,39 +1,14 @@
-import asyncio
-import os
-from functools import partial
 from pathlib import Path
-from typing import Callable
 
-import orjson
 import torch
-from simple_parsing import ArgumentParser
-from torch import Tensor
-from transformers import (
-    AutoModel,
-    AutoTokenizer,
-    BitsAndBytesConfig,
-    PreTrainedModel,
-    PreTrainedTokenizer,
-    PreTrainedTokenizerFast,
-)
+from sae_lens import HookedSAETransformer
 
-from delphi.clients import Offline, OpenRouter
-from delphi.config import RunConfig
-from delphi.explainers import DefaultExplainer
-from delphi.latents import LatentCache, LatentDataset
-from delphi.latents.neighbours import NeighbourCalculator
-from delphi.log.result_analysis import log_results
-from delphi.pipeline import Pipe, Pipeline, process_wrapper
-from delphi.scorers import DetectionScorer, FuzzingScorer
-from delphi.sparse_coders import load_hooks_sparse_coders, load_sparse_coders
-from delphi.utils import assert_type
 from delphi.config import CacheConfig, ConstructorConfig, RunConfig, SamplerConfig
-from sae_lens import SAE, HookedSAETransformer
-
 from delphi.hsae_utils import populate_cache
+from delphi.sparse_coders import load_hooks_sparse_coders
 
 """
-*** delphi applied to hsae *** 
+*** delphi applied to hsae ***
 
 - uses TransformerLens for the tokenization and the model
 """
@@ -45,7 +20,7 @@ else:
 
 print(f"Device: {device}")
 
-# Path to save the latent activations 
+# Path to save the latent activations
 latents_path = Path().cwd().parent / "latents"
 
 # use get_pretrained_saes_directory to get access to all pretrained sae names
@@ -56,9 +31,9 @@ cache_cfg = CacheConfig(
     dataset_repo="apollo-research/roneneldan-TinyStories-tokenizer-gpt2",
     dataset_split="train",
     n_splits=5,
-    batch_size=128, 
-    cache_ctx_len=256, 
-    n_tokens=10_000_000
+    batch_size=128,
+    cache_ctx_len=256,
+    n_tokens=10_000_000,
 )
 
 run_cfg_hsae = RunConfig(
@@ -73,11 +48,7 @@ run_cfg_hsae = RunConfig(
 hookpoint_to_sparse_encode, _ = load_hooks_sparse_coders(model, run_cfg_hsae)
 
 populate_cache(
-    run_cfg_hsae, 
-    model, 
-    hookpoint_to_sparse_encode, 
-    latents_path, 
-    model.tokenizer
+    run_cfg_hsae, model, hookpoint_to_sparse_encode, latents_path, model.tokenizer
 )
 
 # def populate_cache(
