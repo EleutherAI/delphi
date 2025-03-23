@@ -9,6 +9,7 @@ from .latents import ActivatingExample, LatentRecord
 def normalize_activations(
     examples: list[ActivatingExample], max_activation: float
 ) -> list[ActivatingExample]:
+    max_activation = max(max_activation, 1e-3)
     for example in examples:
         example.normalized_activations = (
             example.activations * 10 / max_activation

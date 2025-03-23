@@ -16,16 +16,20 @@ runs = api.runs(
     filters={
         "createdAt": {"$gt": iso_date},
         "state": "finished",
-        "displayName": {"$regex": r"sae-pkm"},
+        "displayName": {
+            "$regex": r"sae-pkm",
+        },
     },
 )
 runs = sorted(runs, key=lambda x: x.name)
+runs = [run for run in runs if not run.name.endswith("baseline-x64")]
 print("Got", len(runs), "runs")
 # %%
 from matplotlib import pyplot as plt
 
 types = "baseline", "pkm", "kron"
 type_colors = "red", "green", "blue"
+run_info = {}
 for layer in (10, 15, 20):
     for run in runs:
         name = run.name[len("sae-pkm/") :]
@@ -45,6 +49,13 @@ for layer in (10, 15, 20):
         sae_params = int(sae_params.replace("_", ""))
         color = type_colors[types.index(name.partition("-")[0])]
         x, y = sae_params, fvu
+        run_info[name] = dict(
+            sae_params=sae_params,
+            fvu=fvu,
+            dead_pct=dead_pct,
+            k=k,
+            expansion_factor=expansion_factor,
+        )
         size = 100
         marker = "x" if "-k64" in name else "o"
         if "-x64" in name:
@@ -58,4 +69,61 @@ for layer in (10, 15, 20):
     plt.legend()
     plt.show()
 # %%
-run: wandb.wandb_run.Run
+from functools import lru_cache
+
+
+@lru_cache(maxsize=None)
+def autointerp_scores(latent_path, layer):
+    scores = []
+    for latent in latent_path.glob(f".model.layers.{layer}.mlp_latent*.txt"):
+        n_correct, n_total = 0, 0
+        for prediction in json.load(open(latent)):
+            n_correct += prediction["correct"] == True
+            n_total += 1
+        scores.append(n_correct / n_total)
+    return scores
+
+
+# %%
+from pathlib import Path
+import json
+
+base_score_dir = Path("results/scores/sae-pkm")
+base_config = "default_neighbors/detection"
+layer = 10
+configuration_scores = {}
+x_axis = "fvu"
+# x_axis = "dead"
+for configuration in sorted(base_score_dir.glob("*")):
+    config = configuration.name
+    try:
+        info = run_info[config]
+    except KeyError:
+        continue
+    latent_path = configuration / base_config
+    scores = autointerp_scores(latent_path, layer)
+    if not scores:
+        print("No latents found for", config)
+        continue
+    avg_score = sum(scores) / len(scores)
+    if x_axis == "dead":
+        x = info["dead_pct"]
+    elif x_axis == "fvu":
+        x = info["fvu"]
+    else:
+        raise ValueError
+    y = avg_score
+    color = type_colors[types.index(config.partition("-")[0])]
+    size = 50
+    marker = "x" if "-k64" in config else "o"
+    if "-x64" in config:
+        size *= 2
+    if color == "blue" and "-long" in config:
+        color = "cyan"
+    plt.scatter(x, y, label=config, c=color, marker=marker, s=size)
+plt.legend(loc="upper left", bbox_to_anchor=(1.02, 1.02), prop={"size": 12})
+plt.xlabel("FVU" if x_axis == "fvu" else "% of dead neurons")
+plt.ylabel("Average detection score")
+# %%
+set(run_info.keys()) - set(x.name for x in base_score_dir.glob("*"))
+# %%

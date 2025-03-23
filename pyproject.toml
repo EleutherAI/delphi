@@ -40,6 +40,7 @@ dependencies = [
     "torchtyping>=0.1.5",
     "opt-einsum>=3.4.0",
     "nnsight>=0.4.3",
+    "wandb>=0.19.8",
 ]
 
 [project.optional-dependencies]

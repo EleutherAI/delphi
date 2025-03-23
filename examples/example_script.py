@@ -58,6 +58,9 @@ async def main(args):
         if args.decoder_similarity:
             experiment_cfg.neighbours_type = "decoder_similarity"
             experiment_name += "_ds"
+    print("Experiment name:", experiment_name)
+    print("Module:", module)
+    print("Directory:", sae_model)
     experiment_name_scores = experiment_name
     substitute = args.substitute
     if substitute != Substitution.NONE:

@@ -4,7 +4,6 @@ import random
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import NamedTuple
 
 import aiofiles
 
@@ -42,7 +41,7 @@ class Explainer(ABC):
     async def __call__(self, record: LatentRecord | ExplainerResult) -> ExplainerResult:
         if isinstance(record, ExplainerResult):
             return record
-        
+
         messages = self._build_prompt(record.train)
 
         response = await self.client.generate(
@@ -112,6 +111,10 @@ class Explainer(ABC):
                 # decide on the best way to do this
                 if activation_count > 10:
                     break
+                try:
+                    int(normalized_activation)
+                except OverflowError:
+                    normalized_activation = 0
                 acts += f'("{str_tok}" : {int(normalized_activation)}), '
                 activation_count += 1
 

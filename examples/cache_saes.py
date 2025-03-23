@@ -138,13 +138,26 @@ def main(cfg: CacheConfig, args):
             print("Caching", (cache_save_dir / ("." + hookpoint)))
 
         def _forward(sae, k,x):
-            encoded = sae.pre_acts(x)
-            if k is not None:
-                trained_k = k
-            else:
-                trained_k = sae.cfg.k
-            topk = TopK(trained_k, postact_fn=ACTIVATIONS_CLASSES["Identity"]())
-            return topk(encoded)
+            try:
+                og_shape = x.shape
+                x = x.flatten(0, -2)
+                values, indices = sae.encode(x, k)
+                result = torch.zeros(
+                    (x.shape[0], sae.cfg.num_latents or
+                     sae.cfg.expansion_factor * x.shape[-1],),
+                    device=x.device,
+                    dtype=x.dtype,
+                )
+                result.scatter_(-1, indices, values)
+                return result.reshape(*og_shape[:-1], -1)
+            except AttributeError:
+                encoded = sae.pre_acts(x)
+                if k is not None:
+                    trained_k = k
+                else:
+                    trained_k = sae.cfg.k
+                topk = TopK(trained_k, postact_fn=ACTIVATIONS_CLASSES["Identity"]())
+                return topk(encoded)
 
         atoms = hookpoint.split(".")
         submodule = model

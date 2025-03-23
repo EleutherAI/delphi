@@ -718,6 +718,7 @@ dependencies = [
     { name = "torchtyping" },
     { name = "transformers" },
     { name = "vllm" },
+    { name = "wandb" },
 ]
 
 [package.optional-dependencies]
@@ -770,6 +771,7 @@ requires-dist = [
     { name = "torchtyping", specifier = ">=0.1.5" },
     { name = "transformers", specifier = "<4.48.0" },
     { name = "vllm" },
+    { name = "wandb", specifier = ">=0.19.8" },
 ]
 provides-extras = ["dev", "visualize"]
 
@@ -817,6 +819,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed", size = 60722 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2", size = 20277 },
+]
+
+[[package]]
+name = "docker-pycreds"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c5/e6/d1f6c00b7221e2d7c4b470132c931325c8b22c51ca62417e300f5ce16009/docker-pycreds-0.4.0.tar.gz", hash = "sha256:6ce3270bcaf404cc4c3e27e4b6c70d3521deae82fb508767870fdbf772d584d4", size = 8754 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/e8/f6bd1eee09314e7e6dee49cbe2c5e22314ccdb38db16c9fc72d2fa80d054/docker_pycreds-0.4.0-py2.py3-none-any.whl", hash = "sha256:7266112468627868005106ec19cd0d722702d2b7d5912a28e19b826c3d37af49", size = 8982 },
 ]
 
 [[package]]
@@ -1068,6 +1082,30 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0e/c4/a159e9f842b0e8b8495b2689af6cf3426f002cf01207ca8134db82fc4088/gguf-0.10.0.tar.gz", hash = "sha256:52a30ef26328b419ffc47d9269fc580c238edf1c8a19b5ea143c323e04a038c1", size = 65704 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1b/e4/c5f9bd71840ae9afb7e2b7c285ba209f2ef5e9cd83885f8c596c551d3026/gguf-0.10.0-py3-none-any.whl", hash = "sha256:706089fba756a06913227841b4a6c8398360fa991569fd974e663a92b224e33f", size = 71584 },
+]
+
+[[package]]
+name = "gitdb"
+version = "4.0.12"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "smmap" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/94/63b0fc47eb32792c7ba1fe1b694daec9a63620db1e313033d18140c2320a/gitdb-4.0.12.tar.gz", hash = "sha256:5ef71f855d191a3326fcfbc0d5da835f26b13fbcba60c32c21091c349ffdb571", size = 394684 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/61/5c78b91c3143ed5c14207f463aecfc8f9dbb5092fb2869baf37c273b2705/gitdb-4.0.12-py3-none-any.whl", hash = "sha256:67073e15955400952c6565cc3e707c554a4eea2e428946f7a4c162fab9bd9bcf", size = 62794 },
+]
+
+[[package]]
+name = "gitpython"
+version = "3.1.44"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "gitdb" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c0/89/37df0b71473153574a5cdef8f242de422a0f5d26d7a9e231e6f169b4ad14/gitpython-3.1.44.tar.gz", hash = "sha256:c87e30b26253bf5418b01b0660f818967f3c503193838337fe5e573331249269", size = 214196 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1d/9a/4114a9057db2f1462d5c8f8390ab7383925fe1ac012eaa42402ad65c2963/GitPython-3.1.44-py3-none-any.whl", hash = "sha256:9e0e10cda9bed1ee64bc9a6de50e7e38a9c9943241cd7f585f6df3ed28011110", size = 207599 },
 ]
 
 [[package]]
@@ -3908,6 +3946,19 @@ wheels = [
 ]
 
 [[package]]
+name = "sentry-sdk"
+version = "2.22.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/81/b6/662988ecd2345bf6c3a5c306a9a3590852742eff91d0a78a143398b816f3/sentry_sdk-2.22.0.tar.gz", hash = "sha256:b4bf43bb38f547c84b2eadcefbe389b36ef75f3f38253d7a74d6b928c07ae944", size = 303539 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/7f/0e4459173e9671ba5f75a48dda2442bcc48a12c79e54e5789381c8c6a9bc/sentry_sdk-2.22.0-py2.py3-none-any.whl", hash = "sha256:3d791d631a6c97aad4da7074081a57073126c69487560c6f8bffcf586461de66", size = 325815 },
+]
+
+[[package]]
 name = "setproctitle"
 version = "1.3.5"
 source = { registry = "https://pypi.org/simple" }
@@ -4043,6 +4094,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050 },
+]
+
+[[package]]
+name = "smmap"
+version = "5.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/cd/a040c4b3119bbe532e5b0732286f805445375489fceaec1f48306068ee3b/smmap-5.0.2.tar.gz", hash = "sha256:26ea65a03958fa0c8a1c7e8c7a58fdc77221b8910f6be2131affade476898ad5", size = 22329 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/be/d09147ad1ec7934636ad912901c5fd7667e1c858e19d355237db0d0cd5e4/smmap-5.0.2-py3-none-any.whl", hash = "sha256:b30115f0def7d7531d22a0fb6502488d879e75b260a9db4d0819cfb25403af5e", size = 24303 },
 ]
 
 [[package]]
@@ -4613,6 +4673,39 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7a/a2/e8fc843e14aec55d18572a93c5443cc89a6b7d537b90d804f7b373301d9f/wadler_lindig-0.1.3.tar.gz", hash = "sha256:476fb7015135f714cef8f8eac7c44b164c8b993345e651a9b6f25b7b112440c9", size = 15197 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/3b/5b918a0da0d6920e7f7328cf0ab00df31b905d709f458596304f09096785/wadler_lindig-0.1.3-py3-none-any.whl", hash = "sha256:3018e4e6b115a7ef21c77414a41cbe7e03e83f6b5e25004958e33432a17f3c94", size = 20140 },
+]
+
+[[package]]
+name = "wandb"
+version = "0.19.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "docker-pycreds" },
+    { name = "gitpython" },
+    { name = "platformdirs" },
+    { name = "protobuf" },
+    { name = "psutil" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "sentry-sdk" },
+    { name = "setproctitle" },
+    { name = "setuptools" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/22/f2/001aee271c0665afc7424c14ea2fa6fd9987d9d4e186d187cd0bac2d11db/wandb-0.19.8.tar.gz", hash = "sha256:3a4844bb38758657b94b090e72ee355fe5b926e3a048232f0ca4248f801d8d80", size = 39244743 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d4/79/058be304cddf78e53ebaddeefbfeec66c3d67d6f733653f9f7de48efcfe0/wandb-0.19.8-py3-none-any.whl", hash = "sha256:75dea834d579f38e0e1f857e644020e22c851f9b920e9c6c6345bacb98c3f3fc", size = 6305883 },
+    { url = "https://files.pythonhosted.org/packages/3c/df/e8e0ec80afd0a437e3ddc10da3e2286d9bab2169b48fd0f768a455d49971/wandb-0.19.8-py3-none-macosx_10_14_x86_64.whl", hash = "sha256:6556147ba33b7ff4a0111bb6bf5ea485e4974c22f520f1e2a5eaad670a058c80", size = 20474304 },
+    { url = "https://files.pythonhosted.org/packages/9a/6e/171701d80f0f20e53c74e8e0ecab06c31a59d53cab295ec108ac39140fef/wandb-0.19.8-py3-none-macosx_11_0_arm64.whl", hash = "sha256:f68517c2059d12912a90ae32ce95a2711e39f6c157c759eb191527739a12db8b", size = 19942528 },
+    { url = "https://files.pythonhosted.org/packages/59/24/24720683f6b9c19dd41b081e32d4585dc9a2f1e2d0b7a9cb63cde690868e/wandb-0.19.8-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:96cb534b19c2d301ac4fb0e7cfbc32198a704e29e87337133d6b71fdad33cf2f", size = 20471015 },
+    { url = "https://files.pythonhosted.org/packages/22/0a/a9f6dcc96a6ee7cd5365af3a8e4b896cd373e4a11cbb1468b6d9aaac37f3/wandb-0.19.8-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1781b36434d494d6b34e2149201bae8cab960cb31571f11b981c4a62462d5af8", size = 19460731 },
+    { url = "https://files.pythonhosted.org/packages/e0/71/7b7050ecab7288782ae0c7560f1ca06f4cf854a5ae08abeaf643785af1a0/wandb-0.19.8-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c25f0e40025b838b7a424b51837a2a5fd071686c59e1c46d73f04e760d305f79", size = 20792273 },
+    { url = "https://files.pythonhosted.org/packages/45/54/8b6f1f41cf4a8b67439d4f0842de80084709cad2939152503046b42d863c/wandb-0.19.8-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:068eb0154f80be973ab291346d831e9cc80a9de1b8752bdeb48a997c3506fec4", size = 19470793 },
+    { url = "https://files.pythonhosted.org/packages/d7/bb/28d94b0369f0055dc4aef704971858a414490f6eb23b9bbfa70d090f4b59/wandb-0.19.8-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:82a956150e53df0b4c193933b3e62c3e8255dc8b43bb187270939ef35b03fda3", size = 20872380 },
+    { url = "https://files.pythonhosted.org/packages/80/82/9d653fe043d48075342bed7a545611391fc62095fb1e77d6574a8f2091e3/wandb-0.19.8-py3-none-win32.whl", hash = "sha256:9d71f153cb9330e307b1b054be01971a1bd164fb9bd4190d7f57989c2d6b86e8", size = 20165481 },
+    { url = "https://files.pythonhosted.org/packages/b6/90/038a64abcbe5f991468f057bd21bead84a5c39d9b0409b652893263a47b4/wandb-0.19.8-py3-none-win_amd64.whl", hash = "sha256:f7da8e6fc6693014c72fb7db3ecd5e1116066198d2aca96f6eb7220cea03081c", size = 20165486 },
 ]
 
 [[package]]
