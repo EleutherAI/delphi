@@ -27,6 +27,13 @@ runs = natsorted(runs, key=lambda x: x.name)
 runs = [run for run in runs if not run.name.endswith("baseline-x64")]
 print("Got", len(runs), "runs")
 # %%
+plot_dir = Path("results/smollm_plots")
+plot_dir.mkdir(exist_ok=True)
+fvu_dir = plot_dir / "fvu"
+fvu_dir.mkdir(exist_ok=True)
+interp_dir = plot_dir / "interp"
+interp_dir.mkdir(exist_ok=True)
+# %%
 from functools import lru_cache
 
 
@@ -91,6 +98,7 @@ for layer in (10, 15, 20):
         y = fvu
         # size = 100 * (1 + math.log(sae_params / 50e6))
         size = 80 * ((sae_params / 50e6) ** 2)
+        marker = "x" if "-k64" in name else "o"
         run_info[name] = dict(
             sae_params=sae_params,
             encoder_params=encoder_params,
@@ -100,8 +108,8 @@ for layer in (10, 15, 20):
             k=k,
             expansion_factor=expansion_factor,
             size=size,
+            marker=marker,
         )
-        marker = "x" if "-k64" in name else "o"
         # if "-x64" in name:
         #     size *= 2
         if type_name == "kron" and "-long" in name:
@@ -138,6 +146,7 @@ for layer in (10, 15, 20):
     plt.xscale("log")
     plt.ylabel("FVU")
     plt.legend(loc="upper left", bbox_to_anchor=(1.02, 1.02), prop={"size": 11})
+    plt.savefig(fvu_dir / f"layer_{layer}.png")
     plt.show()
     # break
 # %%
@@ -162,40 +171,44 @@ import json
 
 base_score_dir = Path("results/scores/sae-pkm")
 base_config = "default/detection"
-layer = 10
-configuration_scores = {}
-x_axis = "fvu"
-# x_axis = "dead"
-for configuration in sorted(base_score_dir.glob("*")):
-    config = configuration.name
-    try:
-        info = run_info[config]
-    except KeyError:
-        continue
-    latent_path = configuration / base_config
-    scores = autointerp_scores(latent_path, layer)
-    if not scores:
-        print("No latents found for", config)
-        continue
-    avg_score = sum(scores) / len(scores)
-    if x_axis == "dead":
-        x = info["dead_pct"]
-    elif x_axis == "fvu":
-        x = info["fvu"]
-    else:
-        raise ValueError
-    y = avg_score
-    color = type_colors[types.index(config.partition("-")[0])]
-    size = 50
-    marker = "x" if "-k64" in config else "o"
-    if "-x64" in config:
-        size *= 2
-    if color == "blue" and "-long" in config:
-        color = "cyan"
-    plt.scatter(x, y, label=config, c=color, marker=marker, s=size)
-plt.legend(loc="upper left", bbox_to_anchor=(1.02, 1.02), prop={"size": 12})
-plt.xlabel("FVU" if x_axis == "fvu" else "% of dead neurons")
-plt.ylabel("Average detection score")
+for layer in (10, 15, 20):
+    for x_axis in "dead", "fvu":
+        plt.figure(figsize=(8, 6))
+        configuration_scores = {}
+        # x_axis = "dead"
+        to_plot = []
+        for configuration in natsorted(base_score_dir.glob("*")):
+            config = configuration.name
+            try:
+                info = run_info[config]
+            except KeyError:
+                continue
+            latent_path = configuration / base_config
+            scores = autointerp_scores(latent_path, layer)
+            if not scores:
+                print("No latents found for", config)
+                continue
+            avg_score = sum(scores) / len(scores)
+            if x_axis == "dead":
+                x = info["dead_pct"]
+            elif x_axis == "fvu":
+                x = info["fvu"]
+            else:
+                raise ValueError
+            y = avg_score
+            color = type_colors[types.index(config.partition("-")[0])]
+            size = info["size"]
+            if color == "blue" and "-long" in config:
+                color = "cyan"
+            # plt.scatter(x, y, label=config, c=color, marker=info["marker"], s=size)
+            to_plot.append((x, y, size, color, info["marker"], config))
+        for x, y, size, color, marker, config in sorted(to_plot):
+            plt.scatter(x, y, label=config, c=color, marker=marker, s=size)
+        plt.legend(loc="upper left", bbox_to_anchor=(1.02, 1.02), prop={"size": 15})
+        plt.xlabel("FVU" if x_axis == "fvu" else "% of dead neurons")
+        plt.ylabel("Average detection score")
+        plt.savefig(interp_dir / f"layer_{layer}-x_{x_axis}.png")
+        plt.show()
 # %%btw
 set(run_info.keys()) - set(x.name for x in base_score_dir.glob("*"))
 # %%

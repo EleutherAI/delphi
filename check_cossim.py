@@ -2,6 +2,8 @@
 %env CUDA_VISIBLE_DEVICES=6
 %load_ext autoreload
 %autoreload 2
+import json
+from pathlib import Path
 from functools import lru_cache
 import numba as nb
 import safetensors.numpy
@@ -39,9 +41,11 @@ for feature_source, layer in [
 #%%
 # feature_source, layer = "sae-pkm/baseline", 10
 # feature_source, layer = "sae-pkm/pkm-h16", 10
-# feature_source, layer = "sae-pkm/pkm-baseline", 10
+feature_source, layer = "sae-pkm/pkm-baseline", 15
+# feature_source, layer = "sae-pkm/kron-baseline", 10
 # feature_source, layer = "sae-pkm/pkm-h8", 10
-feature_source, layer = "monet", "16"
+# feature_source, layer = "monet", "16"
+
 # feature_source, layer = "pythia", "8"
 # feature_source, layer = "smol", "9"
 
@@ -75,7 +79,7 @@ elif feature_source.startswith("sae-pkm"):
     for feature in glob(f"{prefix}/.model.layers.{layer}.mlp_latent*.txt"):
         feature_idx = int(feature.split("latent")[1][:-4])
         feature_descs[feature_idx] = open(feature).read()[1:-1]
-    desc = f"PKM for SmolLM2 135M Layer {layer} MLP"
+    desc = f"PKM for SmolLM2 135M Layer {layer} {feature_source[8:]}"
     cache_dir = f"results/{feature_source}/.model.layers.{layer}.mlp"
     n_features = int(natsorted(glob(f"{cache_dir}/*.safetensors"))[-1][len(cache_dir) + 1:].rpartition("_")[2].partition(".")[0]) + 1
 else:
@@ -100,8 +104,24 @@ print("Sorting...")
 sort_indices = np.argsort(combined_locations[:, 2])
 locations = combined_locations[sort_indices]
 activations = combined_activations[sort_indices]
-root = int(ceil(n_features ** 0.5))
-n_features_padded = root * root
+#%%
+kron_separate = False
+if "kron" in feature_source:
+    root = n_features // 4
+    if "-og8" in feature_source:
+        root = n_features // 8
+    if kron_separate:
+        feature_descs = {
+            (
+                k // root + (k % root) * (n_features // root)
+            ): v for k, v in feature_descs.items()
+        }
+        combined_locations[:, 2] = \
+            combined_locations[:, 2] // root + (combined_locations[:, 2] % root) * (n_features // root)
+        root = n_features // root
+else:
+    root = int(ceil(n_features ** 0.5))
+n_features_padded = n_features // root * root
 print("Done")
 #%%
 if "sae-pkm" in feature_source:
@@ -113,28 +133,14 @@ if "sae-pkm" in feature_source:
         latents={f".model.layers.{layer}.mlp": torch.tensor(list(feature_descs))},
     )
     async for i in ds:
+        proc_idx = i.latent.latent_index - root * 5
+        if proc_idx < 0:
+            continue
+        if proc_idx >= root:
+            break
+        print(i.latent)
+        print("Explanation:", feature_descs[i.latent.latent_index])
         i.display(ds.tokenizer)
-        break
-#%%
-@lru_cache(maxsize=100_000)
-@nb.njit
-def locations_for_feature(feature_idx):
-    start = np.searchsorted(locations[:, 2], feature_idx, side="left")
-    end = np.searchsorted(locations[:, 2], feature_idx, side="right")
-    return start, end + 1
-@nb.njit
-def flatten_ctx(ctx):
-    return ctx[:, 0] * seq_len + ctx[:, 1]
-@lru_cache(maxsize=100_000)
-def find_intersections(f1, f2):
-    s1, e1 = locations_for_feature(f1)
-    s2, e2 = locations_for_feature(f2)
-    l1 = flatten_ctx(locations[s1:e1, :2])
-    l2 = flatten_ctx(locations[s2:e2, :2])
-    if l1.size == 0 or l2.size == 0:
-        return 0
-    common, idx_a, idx_b = np.intersect1d(l1, l2, return_indices=True)
-    return common.size / (l1.size + l2.size - common.size)
 #%%
 if "sae-pkm" in feature_source:
     weight_dir = f"../e2e/{feature_source}/layers.{layer}.mlp/sae.safetensors"
@@ -259,6 +265,26 @@ if 1:
     for sim, expl in sorted(zip(similarities_other, explanations_other), reverse=True)[:5]:
         print(sim, expl)
 #%%
+@lru_cache(maxsize=100_000)
+@nb.njit
+def locations_for_feature(feature_idx):
+    start = np.searchsorted(locations[:, 2], feature_idx, side="left")
+    end = np.searchsorted(locations[:, 2], feature_idx, side="right")
+    return start, end + 1
+@nb.njit
+def flatten_ctx(ctx):
+    return ctx[:, 0] * seq_len + ctx[:, 1]
+@lru_cache(maxsize=100_000)
+def find_intersections(f1, f2):
+    s1, e1 = locations_for_feature(f1)
+    s2, e2 = locations_for_feature(f2)
+    l1 = flatten_ctx(locations[s1:e1, :2])
+    l2 = flatten_ctx(locations[s2:e2, :2])
+    if l1.size == 0 or l2.size == 0:
+        return -1
+    common, idx_a, idx_b = np.intersect1d(l1, l2, return_indices=True)
+    return common.size / (l1.size + l2.size - common.size)
+#%%
 jaccards_same = []
 jaccards_diff = []
 for f1 in tqdm(feature_descs):
@@ -282,4 +308,49 @@ plt.legend()
 plt.title(f"{desc} co-occurrence, all pairs")
 plt.savefig(f"results/pkm_cossim/{feature_source}_{layer}-iou.svg")
 plt.show()
+# %%
+if "sae-pkm" in feature_source:
+    # scores_name = Path("results/scores") / feature_source / "default/detection"
+    # print(scores_name)
+    # score_jsons = scores_name.glob(f".model.layers.{layer}.mlp_latent*.txt")
+    # is_dead = []
+    # for score_json in score_jsons:
+    #     data = json.load(open(score_json))
+    #     this_dead = True
+    #     for d in data:
+    #         if d["correct"] is not None:
+    #             this_dead = False
+    #             break
+    #     is_dead.append(this_dead)
+    # print("Dead ratio:", sum(is_dead) / len(is_dead))
+
+    # raw_dir = f"results/{feature_source}"
+    # ds = LatentDataset(
+    #     raw_dir,
+    #     LatentConfig(), ExperimentConfig(),
+    #     modules=[f".model.layers.{layer}.mlp"],
+    #     latents={f".model.layers.{layer}.mlp": torch.tensor(list(feature_descs))},
+    # )
+    # async for i in ds:
+    #     print(len(i.examples))
+    dead_mask = []
+    for feat in tqdm(feature_descs):
+        dead_mask.append(int((combined_locations[:, 2] == feat).sum() == 0))
+
 #%%
+if "sae-pkm" in feature_source:
+    dead_mask = np.array(dead_mask)
+    feature_indices = np.array(list(feature_descs.keys()))
+    dead = np.zeros((n_features_padded,))
+    dead[feature_indices] = dead_mask
+    # group_idces1 = feature_indices // root
+    # group_idces2 = feature_indices % root
+    # arr1 = np.zeros((n_features // root,))
+    # arr2 =
+    plt.plot(dead.reshape(-1, root).sum(axis=0))
+    plt.show()
+    plt.plot(dead.reshape(-1, root).sum(axis=1))
+    plt.show()
+    plt.plot(dead)
+    plt.show()
+# %%

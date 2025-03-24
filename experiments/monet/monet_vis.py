@@ -11,8 +11,11 @@ sns.set_theme()
 for layer in (0, 4, 8, 12, 16, 20):
     for size in ("850m", "1.4b", "4.1b"):
         size_name = size
+
         def feature_accs(method):
-            score_dir = f"results/scores/monet_cache_converted/{size_name}/default/{method}"
+            score_dir = (
+                f"results/scores/monet_cache_converted/{size_name}/old/default/{method}"
+            )
             feature_accs = []
             for s in os.listdir(score_dir):
                 if not s.endswith(".txt"):
@@ -26,8 +29,11 @@ for layer in (0, 4, 8, 12, 16, 20):
                     continue
                 corrects = []
                 for text in data:
-                    corrects.append(int(text["correct"]))
-                feature_accs.append(sum(corrects)/len(corrects))
+                    if text["correct"] is None:
+                        corrects.append(0)
+                    else:
+                        corrects.append(int(text["correct"]))
+                feature_accs.append(sum(corrects) / len(corrects))
             if not feature_accs:
                 raise FileNotFoundError
             return feature_accs
@@ -35,9 +41,19 @@ for layer in (0, 4, 8, 12, 16, 20):
         fig, axs = plt.subplots(1, 2, figsize=(12, 6))
         try:
             sns.histplot(feature_accs("fuzz"), bins=20, alpha=0.5, ax=axs[0])
-            axs[0].set(xlabel="Accuracy", xlim=(0, 1), ylabel="Number of features", title="Fuzz")
+            axs[0].set(
+                xlabel="Accuracy",
+                xlim=(0, 1),
+                ylabel="Number of features",
+                title="Fuzz",
+            )
             sns.histplot(feature_accs("detection"), bins=20, alpha=0.5, ax=axs[1])
-            axs[1].set(xlabel="Accuracy", xlim=(0, 1), ylabel="Number of features", title="Detect")
+            axs[1].set(
+                xlabel="Accuracy",
+                xlim=(0, 1),
+                ylabel="Number of features",
+                title="Detect",
+            )
         except FileNotFoundError:
             print(f"Skipping layer {layer} for size {size}")
             continue

@@ -83,7 +83,7 @@ for group_name, config_group in {
                 for s in os.listdir(score_dir):
                     if not s.endswith(".txt"):
                         continue
-                    if f"layers.{layer}" not in s:
+                    if f"layers.{layer}." not in s:
                         continue
                     try:
                         data = json.load(open(os.path.join(score_dir, s)))
