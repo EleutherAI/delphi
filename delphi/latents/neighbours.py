@@ -169,8 +169,10 @@ class NeighbourCalculator:
         n_latents = int(torch.max(latent_index)) + 1
 
         # Convert from (batch_id, ctx_pos) to a unique 1D index
-
-        idx_cantor = batch_index * ctx_index + ctx_index
+        # idx_cantor = batch_index * ctx_index + ctx_index
+        idx_cantor = (
+            (batch_index + ctx_index) * (batch_index + ctx_index + 1)
+        ) // 2 + ctx_index
 
         # Sort the indices, because they are not sorted after concatenation
         idx_cantor, idx_cantor_sorted_idx = idx_cantor.sort(dim=0, stable=True)
