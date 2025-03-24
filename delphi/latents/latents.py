@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import NamedTuple, Optional
+from typing import Literal, NamedTuple, Optional
 
 import blobfile as bf
 import orjson
@@ -191,6 +191,8 @@ class LatentRecord:
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
         threshold: float = 0.0,
         n: int = 10,
+        do_display: bool = True,
+        example_source: Literal["examples", "train", "test"] = "examples",
     ):
         """
         Display the latent record in a formatted string.
@@ -338,10 +340,24 @@ class LatentRecord:
         #     _to_string(tokenizer.batch_decode(example.tokens), example.activations)
         #     for example in self.examples[:n]
         # ]
+
+        match example_source:
+            case "examples":
+                examples = self.examples
+            case "train":
+                examples = self.train
+            case "test":
+                examples = [x[0] for x in self.test]
+            case _:
+                raise ValueError(f"Unknown example source: {example_source}")
+        examples = examples[:n]
         strings = _to_string(
-            [example.tokens for example in self.examples[:n]],
-            [example.activations for example in self.examples[:n]],
+            [example.tokens for example in examples],
+            [example.activations for example in examples],
         )
 
-        display(HTML(strings))
-        # display(HTML("<br><br>".join(strings)))
+        if do_display:
+            display(HTML(strings))
+            # display(HTML("<br><br>".join(strings)))
+        else:
+            return strings

@@ -132,15 +132,23 @@ if "sae-pkm" in feature_source:
         modules=[f".model.layers.{layer}.mlp"],
         latents={f".model.layers.{layer}.mlp": torch.tensor(list(feature_descs))},
     )
+    htmls = []
+    current_group = -1
     async for i in ds:
-        proc_idx = i.latent.latent_index - root * 5
-        if proc_idx < 0:
-            continue
-        if proc_idx >= root:
-            break
-        print(i.latent)
-        print("Explanation:", feature_descs[i.latent.latent_index])
-        i.display(ds.tokenizer)
+        if i.latent.latent_index // root != current_group:
+            current_group = i.latent.latent_index // root
+            htmls.append(f"<h1>Group {current_group}</h1>")
+
+        # print(i.latent)
+        # print("Explanation:", feature_descs[i.latent.latent_index])
+        htmls.append(f"<h2>{feature_descs[i.latent.latent_index]}</h2>")
+        htmls.append(i.display(ds.tokenizer, do_display=False, example_source="train"))
+        # i.display(ds.tokenizer,)
+#%%
+if "sae-pkm" in feature_source:
+    os.makedirs(f"results/group_htmls/{feature_source}", exist_ok=True)
+    with open(f"results/group_htmls/{feature_source}_{layer}.html", "w") as f:
+        f.write("\n".join(htmls))
 #%%
 if "sae-pkm" in feature_source:
     weight_dir = f"../e2e/{feature_source}/layers.{layer}.mlp/sae.safetensors"
