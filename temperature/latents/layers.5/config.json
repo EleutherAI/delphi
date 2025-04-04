@@ -1,0 +1,11 @@
+{
+    "dataset_repo": "EleutherAI/fineweb-edu-dedup-10b",
+    "dataset_split": "train[:1%]",
+    "dataset_name": "",
+    "dataset_column": "text",
+    "batch_size": 32,
+    "cache_ctx_len": 256,
+    "n_tokens": 10000000,
+    "n_splits": 5,
+    "model_name": "meta-llama/Meta-Llama-3-8B"
+}

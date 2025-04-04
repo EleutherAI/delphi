@@ -134,7 +134,7 @@ class LatentRecord:
     train: list[ActivatingExample] = field(default_factory=list)
     """Training examples."""
 
-    test: list[ActivatingExample] | list[list[Example]] = field(default_factory=list)
+    test: list[ActivatingExample] = field(default_factory=list)
     """Test examples."""
 
     neighbours: list[Neighbour] = field(default_factory=list)
@@ -145,6 +145,13 @@ class LatentRecord:
 
     extra_examples: Optional[list[Example]] = None
     """Extra examples to include in the record."""
+
+    per_token_frequency: float = 0.0
+    """Frequency of the latent. Number of activations per token."""
+
+    per_context_frequency: float = 0.0
+    """Frequency of the latent. Number of activations in a context per total
+    number of contexts."""
 
     @property
     def max_activation(self) -> float:

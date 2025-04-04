@@ -1,13 +1,14 @@
 from math import ceil
+from typing import Literal
 
 import torch
 
 from ...clients.client import Client
 from ...latents import LatentRecord
-from ...latents.latents import ActivatingExample
+from ...latents.latents import ActivatingExample, NonActivatingExample
 from ..scorer import Scorer
 from .classifier import Classifier
-from .prompts.fuzz_prompt import prompt
+from .prompts.fuzz_prompt import prompt as fuzz_prompt
 from .sample import Sample, examples_to_samples
 
 
@@ -22,6 +23,7 @@ class FuzzingScorer(Classifier, Scorer):
         threshold: float = 0.3,
         log_prob: bool = False,
         temperature: float = 0.0,
+        fuzz_type: Literal["default", "active"] = "default",
         **generation_kwargs,
     ):
         """
@@ -47,9 +49,10 @@ class FuzzingScorer(Classifier, Scorer):
         )
 
         self.threshold = threshold
+        self.fuzz_type = fuzz_type
 
     def prompt(self, examples: str, explanation: str) -> list[dict]:
-        return prompt(examples, explanation)
+        return fuzz_prompt(examples, explanation)
 
     def mean_n_activations_ceil(self, examples: list[ActivatingExample]):
         """
@@ -61,24 +64,57 @@ class FuzzingScorer(Classifier, Scorer):
 
         return ceil(avg)
 
+    def _convert_to_non_activating(
+        self, examples: list[ActivatingExample]
+    ) -> list[NonActivatingExample]:
+        """
+        Convert a list of activating examples to a list of non-activating examples.
+        """
+        return [
+            NonActivatingExample(
+                tokens=example.tokens,
+                activations=example.activations,
+                str_tokens=example.str_tokens,
+                normalized_activations=example.normalized_activations,
+                distance=-1,
+            )
+            for example in examples
+        ]
+
     def _prepare(self, record: LatentRecord) -> list[Sample]:  # type: ignore
         """
         Prepare and shuffle a list of samples for classification.
         """
         assert len(record.test) > 0, "No test records found"
 
-        n_incorrect = self.mean_n_activations_ceil(record.test)  # type: ignore
+        n_incorrect = self.mean_n_activations_ceil(record.test)
 
-        if len(record.not_active) > 0:
+        if self.fuzz_type == "default":
+            assert len(record.not_active) > 0, "No non-activating examples found"
+            # check if non_activating examples have any activations > 0
+            # if they do they are contrastive examples
+            if (record.not_active[0].activations > 0).any():
+                samples = examples_to_samples(
+                    record.not_active,
+                    n_incorrect=0,
+                    highlighted=True,
+                )
+            else:
+                # if they don't we use randomly highlight n_incorrect tokens
+                samples = examples_to_samples(
+                    record.not_active,
+                    n_incorrect=n_incorrect,
+                    highlighted=True,
+                )
+        elif self.fuzz_type == "active":
+            # hard uses activating examples and
+            # highlights non active tokens
+            extras = self._convert_to_non_activating(record.test)
             samples = examples_to_samples(
-                record.not_active,
+                extras,
                 n_incorrect=n_incorrect,
                 highlighted=True,
             )
-
-        else:
-            samples = []
-
         samples.extend(
             examples_to_samples(
                 record.test,  # type: ignore

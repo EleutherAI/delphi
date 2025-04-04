@@ -3,6 +3,7 @@ import json
 import random
 import re
 from abc import abstractmethod
+from typing import Any
 
 import numpy as np
 
@@ -20,6 +21,7 @@ class Classifier(Scorer):
         verbose: bool,
         n_examples_shown: int,
         log_prob: bool,
+        seed: int = 42,
         **generation_kwargs,
     ):
         """
@@ -40,24 +42,25 @@ class Classifier(Scorer):
         self.n_examples_shown = n_examples_shown
         self.generation_kwargs = generation_kwargs
         self.log_prob = log_prob
+        self.rng = random.Random(seed)
 
-    async def __call__(  # type: ignore
-        self,  # type: ignore
-        record: LatentRecord,  # type: ignore
-    ) -> ScorerResult:  # type: ignore
+    async def __call__(
+        self,
+        record: LatentRecord,
+    ) -> ScorerResult:
         samples = self._prepare(record)
-        random.shuffle(samples)
+        self.rng.shuffle(samples)
 
-        samples = self._batch(samples)
+        batched_samples = self._batch(samples)
         results = await self._query(
             record.explanation,
-            samples,
+            batched_samples,
         )
 
         return ScorerResult(record=record, score=results)
 
     @abstractmethod
-    def _prepare(self, record: LatentRecord) -> list[list[Sample]]:
+    def _prepare(self, record: LatentRecord) -> list[Sample]:
         pass
 
     async def _query(
@@ -128,7 +131,9 @@ class Classifier(Scorer):
                 )
         return results
 
-    def _parse(self, string, logprobs=None):
+    def _parse(
+        self, string: str, logprobs: list[float] | None = None
+    ) -> tuple[list[bool], list[float] | list[None]]:
         """Extract binary predictions and probabilities from a string and
         optionally its token logprobs."""
         # Matches the first instance of text enclosed in square brackets
@@ -146,7 +151,7 @@ class Classifier(Scorer):
 
         return predictions, probabilities
 
-    def _parse_logprobs(self, logprobs: list):
+    def _parse_logprobs(self, logprobs: list[Any]) -> list[float]:
         """
         Extracts normalized probabilities of '1' vs '0' tokens from the top n
         log probabilities for each token in a response string of form '[x, x, x, ...]'.
@@ -202,7 +207,7 @@ class Classifier(Scorer):
     def prompt(self, examples: str, explanation: str) -> list[dict]:
         pass
 
-    def _batch(self, samples):
+    def _batch(self, samples: list[Sample]) -> list[list[Sample]]:
         return [
             samples[i : i + self.n_examples_shown]
             for i in range(0, len(samples), self.n_examples_shown)

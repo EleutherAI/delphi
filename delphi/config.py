@@ -17,11 +17,14 @@ class SamplerConfig(Serializable):
     n_quantiles: int = 10
     """Number of latent activation quantiles to sample."""
 
-    train_type: Literal["top", "random", "quantiles"] = "quantiles"
+    train_type: Literal["top", "random", "quantiles", "mix"] = "quantiles"
     """Type of sampler to use for latent explanation generation."""
 
     test_type: Literal["quantiles"] = "quantiles"
     """Type of sampler to use for latent explanation testing."""
+
+    ratio_top: float = 0.2
+    """Ratio of top examples to use for training, if using mix."""
 
 
 @dataclass

@@ -82,7 +82,7 @@ def examples_to_samples(
 
 
 def _prepare_text(
-    example,
+    example: ActivatingExample | NonActivatingExample,
     n_incorrect: int,
     threshold: float,
     highlighted: bool,

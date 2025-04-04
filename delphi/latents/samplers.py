@@ -52,9 +52,10 @@ def train(
     examples: list[ActivatingExample],
     max_activation: float,
     n_train: int,
-    train_type: Literal["top", "random", "quantiles"],
+    train_type: Literal["top", "random", "quantiles", "mix"],
     n_quantiles: int = 10,
     seed: int = 22,
+    ratio_top: float = 0.2,
 ):
     match train_type:
         case "top":
@@ -76,6 +77,17 @@ def train(
             selected_examples = split_quantiles(examples, n_quantiles, n_train)
             selected_examples = normalize_activations(selected_examples, max_activation)
             return selected_examples
+        case "mix":
+            # TODO: currently it will always do 1/5 top and 4/5 quantiles
+            top_examples = examples[: int(n_train * ratio_top)]
+            quantiles_examples = split_quantiles(
+                examples[int(n_train * ratio_top) :],
+                n_quantiles,
+                int(n_train * (1 - ratio_top)),
+            )
+            selected_examples = top_examples + quantiles_examples
+            selected_examples = normalize_activations(selected_examples, max_activation)
+            return selected_examples
 
 
 def test(
@@ -83,15 +95,13 @@ def test(
     max_activation: float,
     n_test: int,
     n_quantiles: int,
-    test_type: Literal["quantiles", "activation"],
+    test_type: Literal["quantiles"],
 ):
     match test_type:
         case "quantiles":
             selected_examples = split_quantiles(examples, n_quantiles, n_test)
             selected_examples = normalize_activations(selected_examples, max_activation)
             return selected_examples
-        case "activation":
-            raise NotImplementedError("Activation sampling not implemented")
 
 
 def sampler(
@@ -106,6 +116,7 @@ def sampler(
         cfg.n_examples_train,
         cfg.train_type,
         n_quantiles=cfg.n_quantiles,
+        ratio_top=cfg.ratio_top,
     )
     record.train = _train
     if cfg.n_examples_test > 0:

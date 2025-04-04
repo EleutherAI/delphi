@@ -45,6 +45,7 @@ class Offline(Client):
         prefix_caching: bool = True,
         batch_size: int = 100,
         max_model_len: int = 4096,
+        number_tokens_to_generate: int = 500,
         num_gpus: int = 2,
         enforce_eager: bool = False,
         statistics: bool = False,
@@ -65,7 +66,7 @@ class Offline(Client):
             max_model_len=max_model_len,
             enforce_eager=enforce_eager,
         )
-        self.sampling_params = SamplingParams(max_tokens=500)
+        self.sampling_params = SamplingParams(max_tokens=number_tokens_to_generate)
         self.tokenizer = AutoTokenizer.from_pretrained(model)
         self.batch_size = batch_size
         self.statistics = statistics

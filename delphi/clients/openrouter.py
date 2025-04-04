@@ -22,6 +22,8 @@ class OpenRouter(Client):
         model: str,
         api_key: str | None = None,
         base_url="https://openrouter.ai/api/v1/chat/completions",
+        max_tokens: int = 3000,
+        temperature: float = 1.0,
     ):
         super().__init__(model)
 
@@ -29,6 +31,8 @@ class OpenRouter(Client):
 
         self.url = base_url
         self.client = httpx.AsyncClient()
+        self.max_tokens = max_tokens
+        self.temperature = temperature
 
     def postprocess(self, response):
         response_json = response.json()
@@ -39,8 +43,10 @@ class OpenRouter(Client):
         self, prompt: str, raw: bool = False, max_retries: int = 1, **kwargs  # type: ignore
     ) -> Response:  # type: ignore
         kwargs.pop("schema", None)
-        max_tokens = kwargs.pop("max_tokens", 500)
-        temperature = kwargs.pop("temperature", 1.0)
+        # We have to decide if we want to do this like this or not
+        # Currently only simulation uses generation kwargs.
+        max_tokens = kwargs.pop("max_tokens", self.max_tokens)
+        temperature = kwargs.pop("temperature", self.temperature)
         data = {
             "model": self.model,
             "messages": prompt,
@@ -52,7 +58,7 @@ class OpenRouter(Client):
         for attempt in range(max_retries):
             try:
                 response = await self.client.post(
-                    url=self.url, json=data, headers=self.headers
+                    url=self.url, json=data, headers=self.headers, timeout=100
                 )
                 if raw:
                     return response.json()

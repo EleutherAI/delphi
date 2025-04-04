@@ -1,7 +1,7 @@
 from ...clients.client import Client
 from ...latents import LatentRecord
 from .classifier import Classifier
-from .prompts.detection_prompt import prompt
+from .prompts.detection_prompt import prompt as detection_prompt
 from .sample import Sample, examples_to_samples
 
 
@@ -40,7 +40,7 @@ class DetectionScorer(Classifier):
         )
 
     def prompt(self, examples: str, explanation: str) -> list[dict]:
-        return prompt(examples, explanation)
+        return detection_prompt(examples, explanation)
 
     def _prepare(self, record: LatentRecord) -> list[Sample]:  # type: ignore
         """
