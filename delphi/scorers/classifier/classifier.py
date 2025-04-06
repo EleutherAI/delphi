@@ -2,11 +2,13 @@ import asyncio
 import json
 import random
 import re
+import traceback
 from abc import abstractmethod
+from typing import Literal
 
 import numpy as np
 
-from ...clients.client import Client
+from ...clients.client import Client, Response
 from ...latents import LatentRecord
 from ...logger import logger
 from ..scorer import Scorer, ScorerResult
@@ -100,19 +102,20 @@ class Classifier(Scorer):
             predictions = [None] * self.n_examples_shown
             probabilities = [None] * self.n_examples_shown
         else:
+            assert isinstance(response, Response)
             selections = response.text
             logprobs = response.logprobs if self.log_prob else None
             try:
                 predictions, probabilities = self._parse(selections, logprobs)
-            except Exception as e:
-                logger.error(f"Parsing selections failed: {e}")
+            except Exception:
+                logger.error("Parsing selections failed:\n" + traceback.format_exc())
                 predictions = [None] * self.n_examples_shown
                 probabilities = [None] * self.n_examples_shown
 
         results = []
         for sample, prediction, probability in zip(batch, predictions, probabilities):
             result = sample.data
-            result.prediction = prediction
+            result.prediction = bool(prediction) if prediction is not None else None
             if prediction is not None:
                 result.correct = prediction == result.activating
             else:
@@ -136,7 +139,7 @@ class Classifier(Scorer):
         match = re.search(pattern, string)
         if match is None:
             raise ValueError("No match found in string")
-        predictions: list[bool] = json.loads(match.group(0))
+        predictions: list[bool | Literal[0, 1]] = json.loads(match.group(0))
         assert len(predictions) == self.n_examples_shown
         probabilities = (
             self._parse_logprobs(logprobs)

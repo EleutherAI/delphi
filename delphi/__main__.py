@@ -86,12 +86,12 @@ def create_neighbours(
         elif constructor_cfg.neighbours_type == "decoder_similarity":
 
             neighbour_calculator = NeighbourCalculator(
-                autoencoder=saes[hookpoint].cuda(), number_of_neighbours=250
+                autoencoder=saes[hookpoint].to("cuda"), number_of_neighbours=250
             )
 
         elif constructor_cfg.neighbours_type == "encoder_similarity":
             neighbour_calculator = NeighbourCalculator(
-                autoencoder=saes[hookpoint].cuda(), number_of_neighbours=250
+                autoencoder=saes[hookpoint].to("cuda"), number_of_neighbours=250
             )
         else:
             raise ValueError(
@@ -131,7 +131,7 @@ async def process_cache(
         }  # The latent range to explain
 
     dataset = LatentDataset(
-        raw_dir=str(latents_path),
+        raw_dir=latents_path,
         sampler_cfg=run_cfg.sampler_cfg,
         constructor_cfg=run_cfg.constructor_cfg,
         modules=hookpoints,

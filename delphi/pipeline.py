@@ -1,15 +1,16 @@
 import asyncio
+from collections.abc import AsyncIterable, Awaitable, Callable
 from functools import wraps
-from typing import Any, AsyncIterable, Callable
+from typing import Any
 
 from tqdm.asyncio import tqdm
 
 
 def process_wrapper(
-    function: Callable,
+    function: Callable[..., Awaitable],
     preprocess: Callable | None = None,
     postprocess: Callable | None = None,
-) -> Callable:
+) -> Callable[..., Awaitable]:
     """
     Wraps a function with optional preprocessing and postprocessing steps.
 
@@ -79,7 +80,7 @@ class Pipeline:
 
         Args:
             loader (Callable): The loader to be executed first.
-            *pipes (list[Pipe]): Pipes to be executed in the pipeline.
+            *pipes (list[Pipe | Callable]): Pipes to be executed in the pipeline.
         """
 
         self.loader = loader
@@ -102,16 +103,14 @@ class Pipeline:
         progress_bar = tqdm(desc="Processing items")
         number_of_items = 0
 
-        async def process_and_update(item, semaphore, count):
-            result = await self.process_item(item, semaphore, count)
+        async def process_and_update(item, semaphore):
+            result = await self.process_item(item, semaphore)
             progress_bar.update(1)
             return result
 
         async for item in self.generate_items():
             number_of_items += 1
-            task = asyncio.create_task(
-                process_and_update(item, semaphore, number_of_items)
-            )
+            task = asyncio.create_task(process_and_update(item, semaphore))
             tasks.add(task)
 
             if len(tasks) >= max_concurrent:
@@ -148,16 +147,13 @@ class Pipeline:
         else:
             raise TypeError("The first pipe must be an async iterable or a callable")
 
-    async def process_item(
-        self, item: Any, semaphore: asyncio.Semaphore, count: int
-    ) -> Any:
+    async def process_item(self, item: Any, semaphore: asyncio.Semaphore) -> Any:
         """
         Processes a single item through all pipes except the first one.
 
         Args:
             item (Any): The item to be processed.
             semaphore (asyncio.Semaphore): Semaphore for controlling concurrency.
-            count (int): The count of the current item being processed.
 
         Returns:
             Any: The processed item.

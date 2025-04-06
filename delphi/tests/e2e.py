@@ -3,10 +3,21 @@ import time
 from pathlib import Path
 
 import torch
+from beartype.claw import beartype_package
 
-from delphi.__main__ import run
-from delphi.config import CacheConfig, ConstructorConfig, RunConfig, SamplerConfig
-from delphi.log.result_analysis import build_scores_df, latent_balanced_score_metrics
+beartype_package("delphi")
+
+from delphi.__main__ import run  # noqa: E402
+from delphi.config import (  # noqa: E402
+    CacheConfig,
+    ConstructorConfig,
+    RunConfig,
+    SamplerConfig,
+)
+from delphi.log.result_analysis import (  # noqa: E402
+    build_scores_df,
+    latent_balanced_score_metrics,
+)
 
 
 async def test():

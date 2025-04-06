@@ -5,6 +5,7 @@ import httpx
 
 from ..logger import logger
 from .client import Client
+from .types import ChatFormatRequest
 
 # Preferred provider routing arguments.
 # Change depending on what model you'd like to use.
@@ -36,7 +37,11 @@ class OpenRouter(Client):
         return Response(msg)
 
     async def generate(  # type: ignore
-        self, prompt: str, raw: bool = False, max_retries: int = 1, **kwargs  # type: ignore
+        self,
+        prompt: ChatFormatRequest,
+        raw: bool = False,
+        max_retries: int = 1,
+        **kwargs,  # type: ignore
     ) -> Response:  # type: ignore
         kwargs.pop("schema", None)
         max_tokens = kwargs.pop("max_tokens", 500)

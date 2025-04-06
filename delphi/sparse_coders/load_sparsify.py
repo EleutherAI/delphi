@@ -1,14 +1,30 @@
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import Callable
+from typing import Optional, Protocol, Union
 
 import torch
-from sparsify import SparseCoder
+import torch._dynamo.eval_frame
+from sparsify import SparseCoder, SparseCoderConfig
+from sparsify.sparse_coder import EncoderOutput
 from torch import Tensor
 from transformers import PreTrainedModel
 
 
-def sae_dense_latents(x: Tensor, sae: SparseCoder) -> Tensor:
+class PotentiallyWrappedSparseCoder(Protocol):
+    def encode(self, x: Tensor) -> EncoderOutput: ...
+
+    def to(
+        self,
+        device: Optional[Union[str, torch.device]] = None,
+        dtype: Optional[torch.dtype] = None,
+    ) -> torch.nn.Module: ...
+
+    cfg: SparseCoderConfig
+    num_latents: int
+
+
+def sae_dense_latents(x: Tensor, sae: PotentiallyWrappedSparseCoder) -> Tensor:
     """Run `sae` on `x`, yielding the dense activations."""
     x_in = x.reshape(-1, x.shape[-1])
     encoded = sae.encode(x_in)
@@ -51,7 +67,7 @@ def load_sparsify_sparse_coders(
     hookpoints: list[str],
     device: str | torch.device,
     compile: bool = False,
-) -> dict[str, SparseCoder]:
+) -> dict[str, PotentiallyWrappedSparseCoder]:
     """
     Load sparsify sparse coders for specified hookpoints.
 
