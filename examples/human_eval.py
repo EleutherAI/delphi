@@ -12,12 +12,14 @@ import streamlit as st
 import torch
 from transformers import AutoModel, AutoTokenizer
 
-# Add the directory containing the sync_latent_dataset.py to Python path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
 from delphi.__main__ import load_artifacts, populate_cache
 from delphi.config import CacheConfig, ConstructorConfig, RunConfig, SamplerConfig
 from delphi.latents.sync_dataset import SyncLatentDataset
+
+st.set_page_config(layout="wide")
+
+# Add the directory containing the sync_latent_dataset.py to Python path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 # Helper functions for token visualization
@@ -62,7 +64,7 @@ def cache_latents_if_needed(
                 cache_cfg=CacheConfig(
                     dataset_repo="EleutherAI/SmolLM2-135M-10B",
                 ),
-                constructor_cfg=ConstructorConfig(),
+                constructor_cfg=ConstructorConfig(example_ctx_len=128),
                 sampler_cfg=SamplerConfig(),
                 model=model_name,
                 sparse_model=str(checkpoint_dir),
@@ -90,28 +92,91 @@ def cache_latents_if_needed(
             )
 
 
-def initialize_test(model_dirs, hookpoint, features_range, num_examples):
+def initialize_test(
+    model_dirs, hookpoint, num_features, num_examples, max_range_expansion=10_000
+):
     # Load examples from both sources
     source_data = {}
     tokenizers = {}
 
     with st.spinner("Loading examples from sources..."):
         for model_name, raw_dir in model_dirs.items():
-            # Create synchronous dataset
-            sync_dataset = SyncLatentDataset(
-                raw_dir,
-                SamplerConfig(n_examples_train=num_examples),
-                ConstructorConfig(),
-                modules=[hookpoint],
-                latents={hookpoint: torch.LongTensor(list(range(*features_range)))},
-            )
+            feature_start, feature_end = (0, num_features)
+            active_examples = {}
+            active_max_acts = {}
+            tokenizer = None
 
-            examples, max_acts, tokenizer = sync_dataset.load_examples()
+            # Keep expanding range until we have enough active features
+            # or hit max expansion
+            while (
+                len(active_examples) < num_features
+                and feature_end < feature_start + max_range_expansion
+            ):
+                # Create current range to check
+                current_range = (feature_start, feature_end)
+
+                # Create synchronous dataset for current range
+                sync_dataset = SyncLatentDataset(
+                    raw_dir,
+                    SamplerConfig(n_examples_train=num_examples),
+                    ConstructorConfig(),
+                    modules=[hookpoint],
+                    latents={hookpoint: torch.LongTensor(list(range(*current_range)))},
+                )
+
+                examples, max_acts, tokenizer = sync_dataset.load_examples()
+
+                # Filter and add active features
+                for feature_key, feature_examples in examples.items():
+                    # Skip features we've already processed
+                    if feature_key in active_examples:
+                        continue
+
+                    # Check if any example has significant activation
+                    is_active = False
+                    for example in feature_examples:
+                        # If any token in any example has activation above threshold
+                        if torch.max(torch.abs(example.activations)) > 0:
+                            is_active = True
+                            break
+
+                    # Keep only active features
+                    if is_active:
+                        active_examples[feature_key] = feature_examples
+                        active_max_acts[feature_key] = max_acts[feature_key]
+
+                    if len(active_examples) >= num_features:
+                        break
+
+                # Update progress
+                st.write(
+                    f"Source {model_name}: Checked features {feature_start}-"
+                    f"{feature_end}, found {len(active_examples)} active features"
+                )
+
+                # Expand range for next iteration
+                feature_start = feature_end
+                feature_end += min(100, max_range_expansion // 10)  # Increase in chunks
+
+                # Break if we have enough features
+                if len(active_examples) >= num_features:
+                    break
+
             source_data[model_name] = {
-                "examples": examples,
-                "max_activations": max_acts,
+                "examples": dict(
+                    list(active_examples.items())[:num_features]
+                ),  # Limit to target count
+                "max_activations": {
+                    k: active_max_acts[k]
+                    for k in list(active_examples.keys())[:num_features]
+                },
             }
             tokenizers[model_name] = tokenizer
+
+            len_examples = len(source_data[model_name]["examples"])
+            st.write(
+                f"Source {model_name}: Final count - {len_examples} active features"
+            )
 
     # Create blinded test sequence
     all_features = []
@@ -195,8 +260,10 @@ def display_current_feature():
 
     # Display progress
     st.progress(st.session_state.current_index / len(st.session_state.blinded_order))
-    len_items = len(st.session_state.blinded_order)
-    st.write(f"Progress: {st.session_state.current_index}/{len_items}")
+    st.write(
+        f"Progress: {st.session_state.current_index}/"
+        f"{len(st.session_state.blinded_order)}"
+    )
 
     st.header(f"Feature ID: {feature_key}")
 
@@ -223,17 +290,92 @@ def display_current_feature():
         list_activations.append(activations.tolist())
 
     # Create and display the visualization
-    fig = display_tokens_with_activations(list_tokens, list_activations, tokenizer)
-    st.plotly_chart(fig, use_container_width=True)
+    # fig = display_tokens_with_activations(list_tokens, list_activations, tokenizer)
+    # st.plotly_chart(fig, use_container_width=True)
 
-    # Also display raw tokens with text below
+    # Display the full text with colored tokens based on activation values
+    inverse_vocab = {v: k for k, v in tokenizer.vocab.items()}
+
     for i, (tokens, activations) in enumerate(zip(list_tokens, list_activations)):
-        token_texts = [tokenizer.decode([int(t)]) for t in tokens]
+        st.write(f"**Example {i+1}:**")
 
-        st.write(f"**Example {i+1} Text:**")
-        # Create a DataFrame with token texts and activations
-        df = pd.DataFrame({"Token": token_texts, "Activation": activations})
-        st.dataframe(df, use_container_width=True)
+        # Create colored HTML for the text
+        html = "<div style='font-family: monospace; white-space: pre-wrap;'>"
+
+        for token_id, activation in zip(tokens, activations):
+            token_text = (
+                inverse_vocab[int(token_id)].replace("Ġ", " ").replace("▁", " ")
+            )
+
+            # Color based on activation
+            if activation > 0:
+                # Blue for positive activations with improved scaling
+                intensity = min(255, int(100 + 155 * min(1.0, abs(activation))))
+                opacity = min(1.0, 0.3 + 0.7 * min(1.0, abs(activation)))
+                bg_color = f"rgba(0, 0, {intensity}, {opacity})"
+                text_color = "white" if abs(activation) > 0.4 else "black"
+            elif activation < 0:
+                # Red for negative activations with improved scaling
+                intensity = min(255, int(100 + 155 * min(1.0, abs(activation))))
+                opacity = min(1.0, 0.3 + 0.7 * min(1.0, abs(activation)))
+                bg_color = f"rgba({intensity}, 0, 0, {opacity})"
+                text_color = "white" if abs(activation) > 0.4 else "black"
+            else:
+                # Neutral
+                bg_color = "rgba(220, 220, 220, 0.1)"
+                text_color = "black"
+
+            html += (
+                f"<span style='background-color: {bg_color}; "
+                f"color: {text_color};'>{token_text}</span>"
+            )
+
+        html += "</div>"
+
+        # Display the colored HTML
+        st.markdown(html, unsafe_allow_html=True)
+
+        # Display only tokens with significant activations in a table
+        # activation_threshold = 0.1
+        # cleaned_tokens = [
+        #     inverse_vocab[int(t)].replace("Ġ", " ").replace("▁", " ")
+        #     for t in tokens
+        # ]
+        # significant_tokens = [(token_text, activations[j])
+        #                      for j, token_text in enumerate(cleaned_tokens)
+        #                      if abs(activations[j]) > activation_threshold]
+        significant_tokens = None
+
+        if significant_tokens:
+            # Create DataFrame for display
+            df = pd.DataFrame(
+                {
+                    "Token": [token for token, _ in significant_tokens],
+                    "Activation": [f"{act:.3f}" for _, act in significant_tokens],
+                    # Placeholder column for color
+                    "Color": [""] * len(significant_tokens),
+                }
+            )
+
+            # Apply color styling based on activation value
+            def color_activation(val):
+                val = float(val)
+                if val > 0:
+                    # Blue for positive activations
+                    b = min(255, int(200 * val))
+                    a = min(1.0, abs(val))
+                    return f"background-color: rgba(0, 0, {b}, {a})"
+                else:
+                    # Red for negative activations
+                    r = min(255, int(200 * abs(val)))
+                    a = min(1.0, abs(val))
+                    return f"background-color: rgba({r}, 0, 0, {a})"
+
+            # Apply the styling
+            styled_df = df.style.apply(
+                lambda row: ["", "", color_activation(row["Activation"])], axis=1
+            )
+            st.dataframe(styled_df, use_container_width=True)
 
     return True
 
@@ -259,9 +401,38 @@ def submit_evaluation():
 
     st.session_state.evaluations[f"{source_name}_{feature_key}"] = evaluation
 
+    # Auto-save current results to JSON file
+    auto_save_results()
+
+    if "form_key_counter" not in st.session_state:
+        st.session_state.form_key_counter = 1
+    else:
+        st.session_state.form_key_counter += 1
+
     # Move to next
     st.session_state.current_index += 1
+
     st.rerun()
+
+
+def auto_save_results():
+    """Auto-save current evaluation results to a session-specific JSON file"""
+    # Create a session-specific filename if it doesn't exist
+    if "session_filename" not in st.session_state:
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        st.session_state.session_filename = (
+            f"{st.session_state.hookpoint}_blinded_evaluations_{timestamp}.json"
+        )
+
+    # Calculate summary statistics
+    summary = calculate_summary()
+
+    # Save both evaluations and summary
+    output = {"evaluations": st.session_state.evaluations, "summary": summary}
+
+    # Save to disk
+    with open(st.session_state.session_filename, "w") as f:
+        json.dump(output, f, indent=4)
 
 
 def skip_feature():
@@ -394,9 +565,7 @@ def main():
 
             hookpoint = st.text_input("Hookpoint", "layers.18.mlp")
 
-            col1, col2 = st.columns(2)
-            feature_start = col1.number_input("Feature Range Start", value=0, step=1)
-            feature_end = col2.number_input("Feature Range End", value=10, step=1)
+            num_features = st.number_input("Number of Features", value=10, step=1)
 
             num_examples = st.number_input("Number of Examples", value=20, step=1)
 
@@ -425,8 +594,6 @@ def main():
                     )
                     return
 
-                features_range = (int(feature_start), int(feature_end))
-
                 # Store in session state
                 st.session_state.hookpoint = hookpoint
 
@@ -447,8 +614,8 @@ def main():
                     }
 
                     # Initialize the test data
-                    initialize_test(model_dirs, hookpoint, features_range, num_examples)
-
+                    initialize_test(model_dirs, hookpoint, num_features, num_examples)
+                    st.session_state.form_key_counter = 0
                     st.success("Test initialized successfully!")
                     st.rerun()
                 except Exception as e:
@@ -459,8 +626,12 @@ def main():
         has_more_features = display_current_feature()
 
         if has_more_features:
-            # Evaluation form
-            with st.form("evaluation_form"):
+            if "form_key_counter" not in st.session_state:
+                st.session_state.form_key_counter = 0
+
+            form_key = f"evaluation_form_{st.session_state.form_key_counter}"
+
+            with st.form(form_key):
                 st.text_input(
                     "Explanation",
                     key="explanation",
