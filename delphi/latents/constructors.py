@@ -159,6 +159,9 @@ def constructor(
     non_active_indices = mask.nonzero(as_tuple=False).squeeze()
     activations = activation_data.activations
 
+    # per context frequency
+    record.per_context_frequency = len(unique_batch_pos) / n_windows
+
     # Add activation examples to the record in place
     token_windows, act_windows = pool_max_activation_windows(
         activations=activations,
