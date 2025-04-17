@@ -278,7 +278,9 @@ pytest .
 
 Run an end-to-end test:
 
-```python -m delphi.tests.e2e```
+```python -m tests.e2e```
+
+We use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for releases.
 
 ## License
 
