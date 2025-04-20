@@ -184,6 +184,7 @@ class LatentCache:
         transcode: bool = False,
         filters: dict[str, Float[Tensor, "indices"]] | None = None,
         log_path: Path | None = None,
+        backward: bool = False,
     ):
         """
         Initialize the LatentCache.
@@ -199,6 +200,7 @@ class LatentCache:
         self.model = model
         self.hookpoint_to_sparse_encode = hookpoint_to_sparse_encode
         self.transcode = transcode
+        self.backward = backward
         self.batch_size = batch_size
         self.width = None
         self.cache = InMemoryCache(filters, batch_size=batch_size)
@@ -265,19 +267,31 @@ class LatentCache:
             for batch_number, batch in enumerate(token_batches):
                 total_tokens += tokens_per_batch
 
-                with torch.no_grad():
+                with torch.inference_mode(mode=not self.backward):
                     with collect_activations(
                         self.model,
                         list(self.hookpoint_to_sparse_encode.keys()),
                         self.transcode,
+                        self.backward,
                     ) as activations:
-                        self.model(batch.to(self.model.device))
+                        batch = batch.to(self.model.device)
+                        output = self.model(batch)
+                        if self.backward:
+                            loss = torch.nn.functional.cross_entropy(
+                                output.logits[:, :-1].flatten(end_dim=1),
+                                batch[:, 1:].flatten(),
+                                reduction="sum",
+                            )
+                            loss.backward()
+                        assert len(activations) > 0, "No activations collected"
 
                         for hookpoint, latents in activations.items():
                             sae_latents = self.hookpoint_to_sparse_encode[hookpoint](
                                 latents
                             )
-                            self.cache.add(sae_latents, batch, batch_number, hookpoint)
+                            self.cache.add(
+                                sae_latents.detach(), batch, batch_number, hookpoint
+                            )
                             firing_counts = (sae_latents > 0).sum((0, 1))
                             if self.width is None:
                                 self.width = sae_latents.shape[2]
@@ -290,6 +304,11 @@ class LatentCache:
                                 self.hookpoint_firing_counts[
                                     hookpoint
                                 ] += firing_counts.cpu()
+
+                        if self.backward:
+                            self.model.zero_grad()
+                            del loss
+                            del activations
 
                 # Update the progress bar
                 pbar.update(1)

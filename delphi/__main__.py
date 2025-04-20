@@ -10,6 +10,7 @@ from simple_parsing import ArgumentParser
 from torch import Tensor
 from transformers import (
     AutoModel,
+    AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
     PreTrainedModel,
@@ -37,7 +38,11 @@ def load_artifacts(run_cfg: RunConfig):
     else:
         dtype = "auto"
 
-    model = AutoModel.from_pretrained(
+    if run_cfg.backward:
+        cls = AutoModelForCausalLM
+    else:
+        cls = AutoModel
+    model = cls.from_pretrained(
         run_cfg.model,
         device_map={"": "cuda"},
         quantization_config=(
@@ -296,6 +301,7 @@ def populate_cache(
         batch_size=cache_cfg.batch_size,
         transcode=transcode,
         log_path=log_path,
+        backward=run_cfg.backward,
     )
     cache.run(cache_cfg.n_tokens, tokens)
 

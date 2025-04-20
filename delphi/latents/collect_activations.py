@@ -7,7 +7,10 @@ from transformers import PreTrainedModel
 
 @contextmanager
 def collect_activations(
-    model: PreTrainedModel, hookpoints: list[str], transcode: bool = False
+    model: PreTrainedModel,
+    hookpoints: list[str],
+    transcode: bool = False,
+    backward: bool = False,
 ):
     """
     Context manager that temporarily hooks models and collects their activations.
@@ -42,7 +45,12 @@ def collect_activations(
 
     for name, module in model.named_modules():
         if name in hookpoints:
-            handle = module.register_forward_hook(create_hook(name, transcode))
+            if backward:
+                handle = module.register_full_backward_hook(
+                    create_hook(name, transcode)
+                )
+            else:
+                handle = module.register_forward_hook(create_hook(name, transcode))
             handles.append(handle)
 
     try:
