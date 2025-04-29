@@ -14,7 +14,8 @@ for layer in (0, 4, 8, 12, 16, 20):
 
         def feature_accs(method):
             score_dir = (
-                f"results/scores/monet_cache_converted/{size_name}/old/default/{method}"
+                # f"results/scores/monet_cache_converted/{size_name}/old/default/{method}"
+                f"results/scores/monet_cache_converted/{size_name}/default/{method}"
             )
             feature_accs = []
             for s in os.listdir(score_dir):

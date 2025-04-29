@@ -63,7 +63,8 @@ include = ["delphi*"]
 
 [tool.uv.sources]
 # sparsify = { path = "../halutsae", editable=true }
-sparsify = { path = "../e2e", editable=true }
+# sparsify = { path = "../e2e", editable=true }
+sparsify = { git = "https://github.com/EleutherAI/sparsify", branch="e2e-pkm" }
 
 [[tool.uv.index]]
 url = "https://flashinfer.ai/whl/cu124/torch2.5/flashinfer-python"

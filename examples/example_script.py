@@ -222,6 +222,11 @@ async def main(args):
     ### Build Scorer pipe ###
 
     def scorer_preprocess(result):
+        # save_path = f"results/scores/{sae_model}/{experiment_name_scores}/{score_dir}/{record.latent}.txt"
+
+        # if os.path.exists(save_path):
+        #     return None
+
         record = result.record
         record.explanation = result.explanation
         record.extra_examples = record.not_active
@@ -229,9 +234,13 @@ async def main(args):
         return record
 
     def scorer_postprocess(result, score_dir):
+        if result is None:
+            return
+        
         record = result.record
+        save_path = f"results/scores/{sae_model}/{experiment_name_scores}/{score_dir}/{record.latent}.txt"
         with open(
-            f"results/scores/{sae_model}/{experiment_name_scores}/{score_dir}/{record.latent}.txt",
+            save_path,
             "wb",
         ) as f:
             f.write(orjson.dumps(result.score))

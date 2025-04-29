@@ -1,0 +1,25 @@
+#!/bin/bash
+# set -e
+# Navigate to the parent directory and find SAE directories
+# TRAINED_LIST=baseline,kron-baseline,pkm-baseline,\
+# kron-x64,pkm-x64-h16,pkm-h16,pkm-x64,baseline-k64,\
+# baseline-x64-k64,baseline-x64,kron-x64-k64,kron-u2
+# TRAINED_LIST=kron-ig64,pkm-h32,pkm-h8,kron-u1,kron-u8
+# TRAINED_LIST=pkm-h8,pkm-h16,pkm-h32
+# TRAINED_LIST=pkm-x64-h16
+# TRAINED_LIST=kron-baseline-long,kron-x64-k64-long,\
+# kron-x64-long,kron-u2-long,kron-ig4-long
+TRAINED_LIST=kron-ig4
+
+for sae in ../e2e/sae-pkm/*; do
+    echo "$sae"
+    sae_name=$(basename "$sae")
+    if [[ ! ",$TRAINED_LIST," == *",$sae_name,"* ]]; then
+        echo "Skipping $sae_name"
+        continue
+    fi
+    uv run python -m examples.cache_saes --path="$sae" || true
+    sleep 5
+done
+    # run(f"uv run python -m examples.example_script --model "
+    #     f"{sae}"

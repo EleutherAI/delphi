@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+uv run python -m experiments.monet.cache --separate=True
+uv run python -m experiments.monet.cache --size=1.4b --separate=True
+uv run python -m experiments.monet.cache --size=4.1b --separate=True

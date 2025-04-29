@@ -1,0 +1,17 @@
+#!/bin/bash
+LATENTS=6144
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.12.router --latents $LATENTS --random_subset --neighbors --substitute self
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.12.router --latents $LATENTS --random_subset --neighbors --substitute other
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.12.router --latents $LATENTS --random_subset --neighbors --substitute self_random
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.12.router --latents $LATENTS --random_subset --neighbors --substitute other_random
+
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.12.router --latents $LATENTS --random_subset --substitute self
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.12.router --latents $LATENTS --random_subset --substitute other
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.12.router --latents $LATENTS --random_subset --substitute self_random
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.12.router --latents $LATENTS --random_subset --substitute other_random
+for LAYER in 10 15 20; do
+    uv run python -m examples.example_script --model sae-pkm/pkm-baseline --module ".model.layers.${LAYER}.mlp" --latents 1000  --random_subset --substitute self
+    uv run python -m examples.example_script --model sae-pkm/pkm-baseline --module ".model.layers.${LAYER}.mlp" --latents 1000  --random_subset --substitute other
+    uv run python -m examples.example_script --model sae-pkm/pkm-baseline --module ".model.layers.${LAYER}.mlp" --latents 1000  --random_subset --substitute self_random
+    uv run python -m examples.example_script --model sae-pkm/pkm-baseline --module ".model.layers.${LAYER}.mlp" --latents 1000  --random_subset --substitute other_random
+done

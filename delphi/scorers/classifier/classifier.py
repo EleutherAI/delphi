@@ -45,6 +45,9 @@ class Classifier(Scorer):
         self,
         record: LatentRecord,
     ) -> ScorerResult:
+        if record is None:
+            return None
+        
         samples = self._prepare(record)
         random.shuffle(samples)
 

@@ -108,8 +108,9 @@ for group_name, config_group in {
                 fuzz_accs[config_name] = feature_accs("fuzz")
                 detect_accs[config_name] = feature_accs("detection")
             except FileNotFoundError as e:
-                print(f"Skipping layer {layer} for config {group_name}:", e)
+                # print(f"Skipping layer {layer} for config {group_name}:", e)
                 break
+            print(f"Not skipping layer {layer} for config {group_name}")
         else:
             save_dir = f"results/pkm_autointerp/{group_name}"
             fig, axs = plt.subplots(1, 2, figsize=(12, 6))

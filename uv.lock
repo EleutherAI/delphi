@@ -766,7 +766,7 @@ requires-dist = [
     { name = "sglang", specifier = ">=0.4.3.post2" },
     { name = "sglang-router", specifier = ">=0.1.4" },
     { name = "simple-parsing" },
-    { name = "sparsify", editable = "../e2e" },
+    { name = "sparsify", git = "https://github.com/EleutherAI/sparsify?branch=e2e-pkm" },
     { name = "torchao", specifier = ">=0.8.0" },
     { name = "torchtyping", specifier = ">=0.1.5" },
     { name = "transformers", specifier = "<4.48.0" },
@@ -4126,22 +4126,8 @@ wheels = [
 [[package]]
 name = "sparsify"
 version = "0.1.0"
-source = { editable = "../e2e" }
+source = { git = "https://github.com/EleutherAI/sparsify?branch=e2e-pkm#2c5578306aeb0eaf1d26653872d6d217bcb1f909" }
 dependencies = [
-    { name = "accelerate" },
-    { name = "datasets" },
-    { name = "einops" },
-    { name = "huggingface-hub" },
-    { name = "natsort" },
-    { name = "safetensors" },
-    { name = "schedulefree" },
-    { name = "simple-parsing" },
-    { name = "torch" },
-    { name = "transformers" },
-]
-
-[package.metadata]
-requires-dist = [
     { name = "accelerate" },
     { name = "datasets" },
     { name = "einops" },

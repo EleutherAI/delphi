@@ -1,0 +1,40 @@
+#!/bin/bash
+set -e
+LATENTS=6144
+uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.20.router --latents $LATENTS --random_subset
+uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.16.router --latents $LATENTS --random_subset
+uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.12.router --latents $LATENTS --random_subset
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.8.router --latents $LATENTS --random_subset
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.4.router --latents $LATENTS --random_subset
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.0.router --latents $LATENTS --random_subset
+uv run python -m examples.example_script --model monet_cache_converted/1.4b --module .model.layers.20.router --latents $LATENTS --random_subset
+uv run python -m examples.example_script --model monet_cache_converted/1.4b --module .model.layers.16.router --latents $LATENTS --random_subset
+uv run python -m examples.example_script --model monet_cache_converted/1.4b --module .model.layers.12.router --latents $LATENTS --random_subset
+# uv run python -m examples.example_script --model monet_cache_converted/1.4b --module .model.layers.8.router --latents $LATENTS --random_subset
+# uv run python -m examples.example_script --model monet_cache_converted/1.4b --module .model.layers.4.router --latents $LATENTS --random_subset
+# uv run python -m examples.example_script --model monet_cache_converted/1.4b --module .model.layers.0.router --latents $LATENTS --random_subset
+uv run python -m examples.example_script --model monet_cache_converted/4.1b --module .model.layers.20.router --latents $LATENTS --random_subset
+uv run python -m examples.example_script --model monet_cache_converted/4.1b --module .model.layers.16.router --latents $LATENTS --random_subset
+uv run python -m examples.example_script --model monet_cache_converted/4.1b --module .model.layers.12.router --latents $LATENTS --random_subset
+# uv run python -m examples.example_script --model monet_cache_converted/4.1b --module .model.layers.8.router --latents $LATENTS --random_subset
+# uv run python -m examples.example_script --model monet_cache_converted/4.1b --module .model.layers.4.router --latents $LATENTS --random_subset
+# uv run python -m examples.example_script --model monet_cache_converted/4.1b --module .model.layers.0.router --latents $LATENTS --random_subset
+
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.20.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.16.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.12.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.8.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.4.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/850m --module .model.layers.0.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/1.4b --module .model.layers.20.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/1.4b --module .model.layers.16.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/1.4b --module .model.layers.12.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/1.4b --module .model.layers.8.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/1.4b --module .model.layers.4.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/1.4b --module .model.layers.0.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/4.1b --module .model.layers.20.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/4.1b --module .model.layers.16.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/4.1b --module .model.layers.12.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/4.1b --module .model.layers.8.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/4.1b --module .model.layers.4.router --latents $LATENTS --random_subset --neighbors
+# uv run python -m examples.example_script --model monet_cache_converted/4.1b --module .model.layers.0.router --latents $LATENTS --random_subset --neighbors

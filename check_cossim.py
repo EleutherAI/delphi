@@ -1,7 +1,9 @@
 #%%
-%env CUDA_VISIBLE_DEVICES=6
+%env SPARSIFY_DISABLE_TRITON=1
+%env CUDA_VISIBLE_DEVICES=0
 %load_ext autoreload
 %autoreload 2
+from sparsify import SparseCoder
 import json
 from pathlib import Path
 from functools import lru_cache
@@ -22,6 +24,7 @@ import safetensors.numpy
 from natsort import natsorted
 from delphi.latents import LatentDataset
 from delphi.config import LatentConfig, ExperimentConfig
+torch.set_grad_enabled(False)
 sns.set_theme()
 #%%
 # %env CUDA_VISIBLE_DEVICES=1
@@ -41,10 +44,10 @@ for feature_source, layer in [
 #%%
 # feature_source, layer = "sae-pkm/baseline", 10
 # feature_source, layer = "sae-pkm/pkm-h16", 10
-feature_source, layer = "sae-pkm/pkm-baseline", 15
+# feature_source, layer = "sae-pkm/pkm-baseline", 15
 # feature_source, layer = "sae-pkm/kron-baseline", 10
 # feature_source, layer = "sae-pkm/pkm-h8", 10
-# feature_source, layer = "monet", "16"
+feature_source, layer = "monet", "16"
 
 # feature_source, layer = "pythia", "8"
 # feature_source, layer = "smol", "9"
@@ -79,7 +82,7 @@ elif feature_source.startswith("sae-pkm"):
     for feature in glob(f"{prefix}/.model.layers.{layer}.mlp_latent*.txt"):
         feature_idx = int(feature.split("latent")[1][:-4])
         feature_descs[feature_idx] = open(feature).read()[1:-1]
-    desc = f"PKM for SmolLM2 135M Layer {layer} {feature_source[8:]}"
+    desc = f"SmolLM2 135M Layer {layer} {feature_source[8:]}"
     cache_dir = f"results/{feature_source}/.model.layers.{layer}.mlp"
     n_features = int(natsorted(glob(f"{cache_dir}/*.safetensors"))[-1][len(cache_dir) + 1:].rpartition("_")[2].partition(".")[0]) + 1
 else:
@@ -94,8 +97,11 @@ print("Found", len(feature_descs), "features")
 combined_locations = []
 combined_activations = []
 for st_file in tqdm(natsorted(glob(f"{cache_dir}/*.safetensors"))):
+    start = int(os.path.basename(st_file).partition("_")[0])
     safet = safetensors.numpy.load_file(st_file)
+    tokens = safet["tokens"]
     n_examples, seq_len = safet["tokens"].shape
+    safet["locations"][:, 2] += start
     combined_locations.append(safet["locations"])
     combined_activations.append(safet["activations"])
 combined_locations = np.concatenate(combined_locations)
@@ -124,7 +130,7 @@ else:
 n_features_padded = n_features // root * root
 print("Done")
 #%%
-if "sae-pkm" in feature_source:
+if "sae-pkm" in feature_source and False:
     raw_dir = f"results/{feature_source}"
     ds = LatentDataset(
         raw_dir,
@@ -145,14 +151,15 @@ if "sae-pkm" in feature_source:
         htmls.append(i.display(ds.tokenizer, do_display=False, example_source="train"))
         # i.display(ds.tokenizer,)
 #%%
-if "sae-pkm" in feature_source:
+if "sae-pkm" in feature_source and False:
     os.makedirs(f"results/group_htmls/{feature_source}", exist_ok=True)
     with open(f"results/group_htmls/{feature_source}_{layer}.html", "w") as f:
         f.write("\n".join(htmls))
 #%%
 if "sae-pkm" in feature_source:
     weight_dir = f"../e2e/{feature_source}/layers.{layer}.mlp/sae.safetensors"
-    W_dec = safetensors.numpy.load_file(weight_dir)["W_dec"]
+    weights = safetensors.numpy.load_file(weight_dir)
+    W_dec = weights["W_dec"]
     decs = W_dec[np.array(list(feature_descs.keys()))]
     decs = decs / np.linalg.norm(decs, axis=1, keepdims=True)
     dec_sims = np.dot(decs, decs.T)
@@ -343,8 +350,9 @@ if "sae-pkm" in feature_source:
     #     print(len(i.examples))
     dead_mask = []
     for feat in tqdm(feature_descs):
-        dead_mask.append(int((combined_locations[:, 2] == feat).sum() == 0))
-
+        dead_mask.append(int((combined_locations[:, 2] == feat).sum() != 0))
+#%%
+# dead[10000:10100]
 #%%
 if "sae-pkm" in feature_source:
     dead_mask = np.array(dead_mask)
@@ -355,10 +363,157 @@ if "sae-pkm" in feature_source:
     # group_idces2 = feature_indices % root
     # arr1 = np.zeros((n_features // root,))
     # arr2 =
-    plt.plot(dead.reshape(-1, root).sum(axis=0))
-    plt.show()
-    plt.plot(dead.reshape(-1, root).sum(axis=1))
-    plt.show()
+    
+    # plt.plot(dead.reshape(-1, root).sum(axis=0))
+    # plt.show()
+    # plt.plot(dead.reshape(-1, root).sum(axis=1))
+    # plt.show()
     plt.plot(dead)
     plt.show()
+# %%
+b = weights["encoder.bias"]
+b = b.reshape(-1, root).mean(axis=0)
+plt.plot(b)
+#%%
+coder = SparseCoder.load_from_disk(os.path.dirname(weight_dir))
+#%%
+encoder = coder.encoder
+decoded = encoder.pre.bias @ encoder.weight.T
+grouped = decoded
+plt.plot(grouped.detach().cpu().numpy())
+plt.ylabel("Projection from pre-encoder bias to feature")
+plt.xlabel("Feature")
+#%%
+@nb.njit
+def get_mean(combined_locations, combined_activations, w_dec):
+    result = np.zeros((w_dec.shape[1],))
+    # max_batch, max_seq = np.max(combined_locations, axis=0)[:2]
+    max_batch = np.max(combined_locations[:, 0])
+    max_seq = np.max(combined_locations[:, 1])
+    n_tokens = max(0, max_batch-1) * max_seq + combined_locations[-1, 1]
+    for i in range(combined_locations.shape[0]):
+        result += w_dec[combined_locations[i, 2]] * combined_activations[i] / n_tokens
+    return result
+data_mean = get_mean(
+    combined_locations[:10000],
+    combined_activations.astype(np.float32),
+    weights["W_dec"]
+) + weights["b_dec"]
+#%%
+encoder = coder.encoder
+decoded = encoder(torch.tensor(data_mean).to(encoder.pre.weight))
+grouped = decoded.reshape(-1, root)
+# bins = np.linspace(-1, 1, 50) * 1e3
+bins = np.linspace(-1, 1, 50) * 1e5
+for i, g in enumerate(grouped):
+    # plt.hist(g.detach().cpu().numpy(), bins=bins, alpha=0.4, label=i)
+    sns.kdeplot(
+        g.detach().cpu().numpy(),
+        # bins=bins,
+        alpha=0.4,
+        label=i,
+        bw_adjust=0.5,
+    )
+plt.legend()
+# plt.plot(grouped.detach().cpu().numpy())
+# plt.ylabel("Projection from pre-decoder and pre-encoder biases to feature")
+# plt.xlabel("Feature")
+#%%
+@nb.njit
+def decode(combined_locations, combined_activations, w_dec):
+    max_batch = np.max(combined_locations[:, 0])
+    max_seq = np.max(combined_locations[:, 1])
+    result = np.zeros((max_batch, w_dec.shape[1],))
+    
+    n_tokens = max(0, max_batch-1) * max_seq + combined_locations[-1, 1]
+    for i in range(combined_locations.shape[0]):
+        batch_idx = combined_locations[i, 0]
+        if batch_idx >= max_batch:
+            continue
+        result[batch_idx] += w_dec[combined_locations[i, 2]] * combined_activations[i] / n_tokens
+    return result
+
+decoded = decode(
+    combined_locations[:1000000],
+    combined_activations.astype(np.float32),
+    weights["W_dec"]
+) + weights["b_dec"]
+#%%
+_, indices = coder.encoder.topk(torch.tensor(decoded).to(encoder.pre.weight), k=coder.cfg.k)
+uniques = torch.unique(indices.flatten())
+uniques = uniques.cpu().numpy()
+not_dead = np.zeros((n_features_padded,))
+not_dead[uniques] = 1
+# plt.plot(not_dead.reshape(-1, root).sum(axis=0))
+plt.plot(not_dead)
+# %%
+from transformers import AutoModelForCausalLM, AutoTokenizer
+config = json.loads((Path(os.path.dirname(os.path.dirname(weight_dir))) / "config.json").read_text())
+model = AutoModelForCausalLM.from_pretrained(config["model"], device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained(config["model"])
+#%%
+from collections import OrderedDict
+for m in model.modules():
+    m._forward_hooks = OrderedDict()
+def save_activations(module, input, output):
+    global activations
+    if isinstance(input, tuple):
+        input = input[0]
+    activations = input
+model.model.layers[layer].mlp.register_forward_hook(save_activations)
+model(torch.from_numpy(tokens[:16]).cuda());
+#%%
+og_state_dict = {k: v.clone() for k, v in coder.state_dict().items()}
+#%%
+def vis_dead():
+    global encoded
+    vals = activations.flatten(0, 1).float().cpu()
+    encoded = coder.encoder(vals)
+    out = coder(vals)
+    indices = out.latent_indices
+    uniques = torch.unique(indices.flatten())
+    uniques = uniques.cpu().numpy()
+    not_dead = np.zeros((n_features_padded,))
+    not_dead[uniques] = 1
+    # plt.plot(not_dead.reshape(-1, root).sum(axis=0))
+    # plt.plot(not_dead, label=f"Not dead: {not_dead.mean():.2f}")
+    # sns.kdeplot(uniques, label=f"Not dead: {not_dead.mean():.2f}", bw_adjust=0.1)
+    sns.displot(
+        uniques,
+        label=f"Not dead: {not_dead.mean():.2f}",
+        kind="kde",
+        norm_hist=False,
+    )
+    # sns.histplot(
+    #     uniques,
+    #     # bins=100,
+    #     label=f"Not dead: {not_dead.mean():.2f}",
+    #     # stat="density",
+    #     alpha=0.5,
+    #     kde=True,
+    #     bins=n_features_padded,
+    # )
+    plt.legend()
+
+coder.load_state_dict(og_state_dict, strict=False)
+for u in range(coder.encoder.inner.shape[1]):
+    coder.encoder.inner.data = coder.encoder.inner.data.clone()
+    coder.encoder.inner.data[:, u] = 0
+    vis_dead()
+    plt.title(f"{u} group")
+    plt.show()
+    coder.load_state_dict(og_state_dict, strict=False)
+    
+# %%
+vis_dead()
+#%%
+activations_ = activations
+activations = activations.mean(axis=0, keepdims=True).mean(axis=1, keepdims=True)
+vis_dead()
+activations = activations_
+plt.show()
+#%%
+plt.plot(encoded[0])
+# %%
+tokenizer.batch_decode(tokens[:16])
 # %%

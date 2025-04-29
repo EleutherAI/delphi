@@ -1,0 +1,23 @@
+#!/bin/bash
+# set -e
+# TRAINED_LIST="baseline kron-baseline pkm-baseline \
+# kron-x64 pkm-x64-h16 pkm-h16 pkm-x64 baseline-k64 \
+# baseline-x64-k64 baseline-x64 kron-x64-k64 kron-u2 " \
+# "pkm-h8 pkm-h32"
+# TRAINED_LIST="pkm-h8 pkm-h16 pkm-h32 pkm-x64-h16"
+TRAINED_LIST="kron-baseline-long kron-ig4 kron-ig4-long \
+kron-u1 kron-u2-long kron-u8 kron-u2"
+ALREADY_CACHED=",baseline,"
+for NAME in $TRAINED_LIST; do
+    if [[ $ALREADY_CACHED == *",$NAME,"* ]]; then
+        echo "Skipping $NAME"
+        continue
+    fi
+    for LAYER in 10 15 20; do
+        uv run python -m examples.example_script \
+            --model sae-pkm/${NAME} \
+            --module ".model.layers.${LAYER}.mlp" \
+            --latents 1000 --random_subset #\
+            # --neighbors
+    done
+done
