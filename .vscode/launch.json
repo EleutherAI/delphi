@@ -11,6 +11,15 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": false
+        },
+        {
+            "name": "Delphi",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/delphi/__main__.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": "HuggingFaceTB/SmolLM2-135M /mnt/ssd-1/nev/e2e/checkpoints/binaries/gumbel --explainer_model 'hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4' --dataset_repo 'EleutherAI/SmolLM2-135M-10B' --dataset_split 'train[:1%]' --n_tokens 10_000_000 --max_latents 100 --hookpoints layers.9.mlp layers.18.mlp layers.27.mlp --filter_bos --name gumbel"
         }
     ]
 }

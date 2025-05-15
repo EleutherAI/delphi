@@ -12,7 +12,7 @@ keywords = ["interpretability", "explainable-ai"]
 dependencies = [
     "datasets",
     "orjson",
-    "sparsify@git+https://github.com/EleutherAI/sparsify",
+    "sparsify",
     "safetensors",
     "simple_parsing",
     "jaxtyping",
@@ -26,6 +26,9 @@ dependencies = [
     "anyio>=4.8.0",
     "faiss-cpu"
 ]
+
+[tool.uv.sources]
+sparsify = { git = "https://github.com/eleutherAI/sparsify/", branch = "gumbel-binary" }
 
 [project.optional-dependencies]
 dev = [

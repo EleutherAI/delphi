@@ -133,6 +133,11 @@ class RunConfig(Serializable):
     """Provider to use for explanation and scoring. Options are 'offline' for local
     models and 'openrouter' for API calls."""
 
+    explainer_max_memory: float = field(
+        default=0.9,
+    )
+    """Maximum memory fraction to use for the explainer model."""
+
     name: str = ""
     """The name of the run. Results are saved in a directory with this name."""
 

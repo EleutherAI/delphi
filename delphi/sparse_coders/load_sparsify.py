@@ -8,6 +8,7 @@ from torch import Tensor
 from transformers import PreTrainedModel
 
 
+@torch.autocast("cuda")
 def sae_dense_latents(x: Tensor, sae: SparseCoder) -> Tensor:
     """Run `sae` on `x`, yielding the dense activations."""
     x_in = x.reshape(-1, x.shape[-1])
@@ -15,7 +16,7 @@ def sae_dense_latents(x: Tensor, sae: SparseCoder) -> Tensor:
     buf = torch.zeros(
         x_in.shape[0], sae.num_latents, dtype=x_in.dtype, device=x_in.device
     )
-    buf = buf.scatter_(-1, encoded.top_indices, encoded.top_acts.to(buf.dtype))
+    buf = buf.scatter_(-1, encoded.top_indices.long(), encoded.top_acts.to(buf.dtype))
     return buf.reshape(*x.shape[:-1], -1)
 
 
