@@ -72,9 +72,8 @@ def _top_k_pools(
     Returns:
         The token windows and activation windows.
     """
-    sorted_values, sorted_indices = torch.sort(max_buffer, descending=True)
-
-    activation_windows = torch.stack([split_activations[i] for i in sorted_indices])
+    sorted_indices = torch.argsort(max_buffer, descending=True)
+    activation_windows = split_activations[sorted_indices]
     token_windows = buffer_tokens[sorted_indices]
 
     return token_windows, activation_windows

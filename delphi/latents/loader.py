@@ -7,6 +7,7 @@ from typing import Optional
 
 import numpy as np
 import torch
+from asyncer import asyncify
 from jaxtyping import Float, Int
 from safetensors.numpy import load_file
 from torch import Tensor
@@ -14,6 +15,7 @@ from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizer
 
 from delphi.utils import (
     load_tokenized_data,
+    to_int64_tensor,
 )
 
 from ..config import ConstructorConfig, SamplerConfig
@@ -94,7 +96,7 @@ class TensorBuffer:
         split_data = load_file(self.path)
         first_latent = int(self.path.split("/")[-1].split("_")[0])
         activations = torch.tensor(split_data["activations"])
-        locations = torch.tensor(split_data["locations"].astype(np.int64))
+        locations = to_int64_tensor(split_data["locations"])
         if "tokens" in split_data:
             tokens = torch.tensor(split_data["tokens"].astype(np.int64))
         else:
@@ -345,9 +347,24 @@ class LatentDataset:
 
     async def __aiter__(self):
         """Asynchronously iterate over the dataset."""
+        tasks = set()
         for buffer in self.buffers:
-            async for record in self._aprocess_buffer(buffer):
-                yield record
+            for data in buffer:
+                if data is None:
+                    continue
+                task = asyncio.create_task(self._aprocess_latent(data))
+                tasks.add(task)
+
+                done, pending = await asyncio.wait(
+                    tasks, return_when=asyncio.FIRST_COMPLETED
+                )
+                for task in done:
+                    yield task.result()
+                tasks = pending
+        if tasks:
+            done, _ = await asyncio.wait(tasks)
+            for task in done:
+                yield task.result()
 
     async def _aprocess_buffer(self, buffer: TensorBuffer):
         """
@@ -359,14 +376,27 @@ class LatentDataset:
         Yields:
             Optional[LatentRecord]: Processed latent record or None.
         """
+        tasks = set()
         for data in buffer:
-            if data is not None:
-                record = await self._aprocess_latent(data)
-                if record is not None:
-                    yield record
-            await asyncio.sleep(0)  # Allow other coroutines to run
+            if data is None:
+                continue
+            task = asyncio.create_task(self._aprocess_latent(data))
+            tasks.add(task)
+            done, pending = await asyncio.wait(
+                tasks, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in done:
+                yield task.result()
+            tasks = pending
+        done, _ = await asyncio.wait(tasks)
+        for task in done:
+            yield task.result()
 
-    async def _aprocess_latent(self, latent_data: LatentData) -> LatentRecord | None:
+    @asyncify
+    def _aprocess_latent(self, latent_data: LatentData) -> LatentRecord | None:
+        return self._process_latent(latent_data)
+
+    def _process_latent(self, latent_data: LatentData) -> LatentRecord | None:
         """
         Asynchronously process a single latent.
 

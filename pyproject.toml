@@ -26,7 +26,8 @@ dependencies = [
     "aiofiles",
     "sentence_transformers",
     "anyio>=4.8.0",
-    "faiss-cpu"
+    "faiss-cpu",
+    "asyncer>=0.0.8",
 ]
 
 [project.optional-dependencies]

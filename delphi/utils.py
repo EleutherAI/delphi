@@ -1,5 +1,8 @@
 from typing import Any, TypeVar, cast
 
+import numpy as np
+import torch
+from torch import Tensor
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
@@ -42,3 +45,12 @@ def assert_type(typ: type[T], obj: Any) -> T:
         raise TypeError(f"Expected {typ.__name__}, got {type(obj).__name__}")
 
     return cast(typ, obj)  # type: ignore
+
+
+def to_int64_tensor(tensor: np.ndarray) -> Tensor:
+    assert tensor.dtype == np.uint16
+    og_shape = tensor.shape
+    t = torch.tensor(tensor.ravel().view(np.int16))
+    result = torch.zeros(t.shape[0] * 4, dtype=torch.int16)
+    result[::4] = t
+    return result.view(torch.int64).view(og_shape)
