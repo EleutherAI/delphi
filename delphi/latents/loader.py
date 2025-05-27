@@ -433,6 +433,7 @@ class LatentDataset:
                     str(latent_data.latent.latent_index)
                 ],
             )
+            
         record = constructor(
             record=record,
             activation_data=latent_data.activation_data,

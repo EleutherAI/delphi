@@ -5,22 +5,24 @@ import random
 import sys
 import time
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 import torch
-from transformers import AutoModel, AutoTokenizer
+from transformers import (
+    AutoModel,
+    AutoTokenizer,
+    PreTrainedTokenizer,
+    PreTrainedTokenizerFast,
+)
 
 from delphi.__main__ import load_artifacts, populate_cache
 from delphi.config import CacheConfig, ConstructorConfig, RunConfig, SamplerConfig
-from delphi.latents.loader import TensorBuffer, LatentData, LatentRecord, ActivationData
-
-from typing import Dict, List, Optional, Tuple, Union
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
-# from delphi.latents.sync_dataset import LatentData, LatentRecord, ActivationData
 
 from delphi.latents.constructors import constructor
+from delphi.latents.loader import ActivationData, LatentData, LatentRecord, TensorBuffer
 from delphi.latents.samplers import sampler
 from delphi.utils import load_tokenized_data
 
@@ -623,10 +625,12 @@ def display_current_feature():
     inverse_vocab = {v: k for k, v in tokenizer.vocab.items()}
 
     for i, (tokens, activations) in enumerate(zip(list_tokens, list_activations)):
-        st.write(f"**Example {i+1}:**")
+        # st.write(f"**Example {i+1}:**")
+        example_number_text = f"Example {i+1}: "
 
         # Create colored HTML for the text
         html = "<div style='font-family: monospace; white-space: pre-wrap;'>"
+        html += f"<span style='color: black;'>{example_number_text}</span>"
 
         for token_id, activation in zip(tokens, activations):
             token_text = (
