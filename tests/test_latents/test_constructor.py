@@ -1,48 +1,38 @@
-# import random
-# from itertools import chain
-# from typing import Any, Literal
+from typing import Any
 
-# import pytest
-# import torch
-# from jaxtyping import Int
-# from torch import Tensor
-# from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+from jaxtyping import Int
+from torch import Tensor
+from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
-# from delphi.config import ConstructorConfig, SamplerConfig
-# from delphi.latents import (
-#     ActivatingExample,
-#     Latent,
-#     LatentDataset,
-#     LatentRecord,
-#     constructor,
-#     sampler,
-# )
-# from delphi.latents.latents import ActivationData
+from delphi.config import ConstructorConfig, SamplerConfig
+from delphi.latents import (
+    LatentDataset,
+)
 
 
-# def test_save_load_cache(
-#     cache_setup: dict[str, Any],
-#     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
-# ):
-#     sampler_cfg = SamplerConfig(
-#         n_examples_train=3,
-#         n_examples_test=3,
-#         n_quantiles=3,
-#         train_type="quantiles",
-#         test_type="quantiles",
-#     )
-#     dataset = LatentDataset(
-#         cache_setup["temp_dir"],
-#         sampler_cfg,
-#         ConstructorConfig(min_examples=0),
-#         tokenizer,
-#     )
-#     tokens: Int[Tensor, "examples ctx_len"] = dataset.load_tokens()  # type: ignore
-#     assert (tokens == cache_setup["tokens"][: len(tokens)]).all()
-#     for record in dataset:
-#         print(record)
-#         assert len(record.train) <= sampler_cfg.n_examples_train
-#         assert len(record.test) <= sampler_cfg.n_examples_test
+def test_save_load_cache(
+    cache_setup: dict[str, Any],
+    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+):
+    sampler_cfg = SamplerConfig(
+        n_examples_train=3,
+        n_examples_test=3,
+        n_quantiles=3,
+        train_type="quantiles",
+        test_type="quantiles",
+    )
+    dataset = LatentDataset(
+        cache_setup["temp_dir"],
+        sampler_cfg,
+        ConstructorConfig(min_examples=0),
+        tokenizer,
+    )
+    tokens: Int[Tensor, "examples ctx_len"] = dataset.load_tokens()  # type: ignore
+    assert (tokens == cache_setup["tokens"][: len(tokens)]).all()
+    for record in dataset:
+        print(record)
+        assert len(record.train) <= sampler_cfg.n_examples_train
+        assert len(record.test) <= sampler_cfg.n_examples_test
 
 
 # @pytest.fixture(scope="module")

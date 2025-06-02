@@ -23,7 +23,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,visualize]"
       - name: Check space
-        run: du -sh
+        run: du -sh ../.
       - name: Run tests
         run: pytest
       - name: build
