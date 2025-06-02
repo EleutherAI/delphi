@@ -22,7 +22,7 @@ dependencies = [
     "blobfile",
     "bitsandbytes",
     "flask",
-    "vllm<0.8.0",
+    "vllm",
     "aiofiles",
     "sentence_transformers",
     "anyio>=4.8.0",
@@ -52,7 +52,7 @@ include = ["delphi*"]
 
 [tool.ruff]
 # TODO: Clean up or remove experiments folder.
-exclude = ["experiments", "**/prompts/*", "**/prompts.py","**/simulator.py"]
+exclude = ["experiments", "**/prompts/*", "**/prompts.py","**/contrastive_prompt.py","**/simulator.py"]
 # Avoid automatically removing unused imports in __init__.py files.
 # Such imports will be flagged with a dedicated message suggesting
 # that the import is either added to the module's __all__ symbol
