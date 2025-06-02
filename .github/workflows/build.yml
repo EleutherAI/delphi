@@ -25,7 +25,7 @@ jobs:
       - name: Check space
         run: du -sh ../.
       - name: Run tests
-        run: pytest
+        run: pytest -s
       - name: build
         run: pip wheel --no-deps -w dist .
   release:
