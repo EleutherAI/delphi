@@ -16,6 +16,7 @@ def test_latent_locations(cache_setup: dict[str, Any]):
     locations = cache.cache.latent_locations["layers.1"]
     max_values, _ = locations.max(axis=0)
     # Expected values based on the cache run
+    print(max_values)
     assert max_values[0] == 5, "Expected first dimension max value to be 5"
     assert max_values[1] == 15, "Expected token ids to go up to 15"
     assert max_values[2] > 32700, "Expected latent dimension around 32768"
@@ -27,6 +28,7 @@ def test_split_files_created(cache_setup: dict[str, Any]):
     """
     save_dir = cache_setup["temp_dir"] / "layers.1"
     cache_files = [f for f in os.listdir(save_dir) if f.endswith(".safetensors")]
+    print(cache_files)
     assert len(cache_files) == 5, "Expected 5 split files in the cache directory"
 
 
@@ -58,6 +60,7 @@ def test_split_file_contents(cache_setup: dict[str, Any]):
         err_msg="Tokens saved do not match the input tokens",
     )
     max_values = locations.max(axis=0)
+    print(max_values)
     assert max_values[0] == 5, "Max batch index mismatch in saved file"
     assert max_values[1] == 15, "Max token value mismatch in saved file"
     assert max_values[2] > 6499, "Latent dimension mismatch in saved file"
