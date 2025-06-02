@@ -57,12 +57,13 @@ class ConstructorConfig(Serializable):
     Otherwise, windows will be used, and the activating example can be anywhere
     window."""
 
-    non_activating_source: Literal["random", "neighbours", "FAISS"] = "random"
+    non_activating_source: Literal["random", "neighbours", "FAISS", "token"] = "random"
     """Source of non-activating examples. Random uses non-activating contexts
     sampled from any non activating window. Neighbours uses actvating contexts
     from pre-computed latent neighbours. FAISS uses semantic similarity search
     to find hard negatives that are semantically similar to activating examples
-    but don't activate the latent."""
+    but don't activate the latent. Token finds windows with the same token as the
+    top activating example."""
 
     neighbours_type: Literal[
         "co-occurrence", "decoder_similarity", "encoder_similarity"
