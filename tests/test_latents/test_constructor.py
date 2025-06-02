@@ -1,14 +1,23 @@
-from typing import Any
+import random
+from itertools import chain
+from typing import Any, Literal
 
 import pytest
+import torch
 from jaxtyping import Int
 from torch import Tensor
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 from delphi.config import ConstructorConfig, SamplerConfig
 from delphi.latents import (
+    ActivatingExample,
+    Latent,
     LatentDataset,
+    LatentRecord,
+    constructor,
+    sampler,
 )
+from delphi.latents.latents import ActivationData
 
 
 def test_save_load_cache(
