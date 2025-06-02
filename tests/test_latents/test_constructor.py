@@ -39,9 +39,7 @@ def test_save_load_cache(
     )
     tokens: Int[Tensor, "examples ctx_len"] = dataset.load_tokens()  # type: ignore
     assert (tokens == cache_setup["tokens"][: len(tokens)]).all()
-    print(tokens.shape)
     for record in dataset:
-        print(len(record.train), len(record.test))
         assert len(record.train) <= sampler_cfg.n_examples_train
         assert len(record.test) <= sampler_cfg.n_examples_test
 
