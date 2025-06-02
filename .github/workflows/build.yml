@@ -23,7 +23,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,visualize]"
       - name: Run tests
-        run: pytest -s
+        run: pytest
       - name: build
         run: pip wheel --no-deps -w dist .
   release:
