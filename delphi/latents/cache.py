@@ -277,9 +277,9 @@ class LatentCache:
                         self.model(batch.to(self.model.device))
 
                         for hookpoint, latents in activations.items():
-                            sae_latents = self.hookpoint_to_sparse_encode[hookpoint].encode(
-                                latents
-                            )
+                            sae_latents = self.hookpoint_to_sparse_encode[
+                                hookpoint
+                            ].encode(latents)
                             self.cache.add(sae_latents, batch, batch_number, hookpoint)
                             firing_counts = (sae_latents > 0).sum((0, 1))
                             if self.width is None:
