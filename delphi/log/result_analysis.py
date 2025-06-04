@@ -9,7 +9,7 @@ from sklearn.metrics import roc_auc_score, roc_curve
 
 
 def import_plotly():
-    """Import plotly with mitigiation for MathJax bug."""
+    """Import plotly with mitigation for MathJax bug."""
     try:
         import plotly.express as px  # type: ignore
         import plotly.io as pio  # type: ignore
@@ -186,7 +186,18 @@ def get_metrics(latent_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(processed_rows)
 
 
-def log_results(scores_path: Path, viz_path: Path, modules: list[str]):
+def add_latent_f1(latent_df: pd.DataFrame) -> pd.DataFrame:
+    f1s = latent_df.groupby(["module", "latent_idx"]).apply(
+        lambda g: compute_classification_metrics(compute_confusion(g))["f1_score"]
+    )
+    f1s.name = "f1_score"
+    f1s = f1s.reset_index()
+    return latent_df.merge(f1s, on=["module", "latent_idx"])
+
+
+def log_results(
+    scores_path: Path, viz_path: Path, modules: list[str], scorer_names: list[str]
+):
     import_plotly()
 
     latent_df, counts = load_data(scores_path, modules)
@@ -195,8 +206,26 @@ def log_results(scores_path: Path, viz_path: Path, modules: list[str]):
         print("No data found")
         return
 
-    dead = sum((counts[m] == 0).sum().item() for m in modules if m in counts)
-    print(f"Number of dead features: {dead}")
+    if counts:
+        dead = sum((counts[m] == 0).sum().item() for m in modules)
+        print(f"Number of dead features: {dead}")
+        print(f"Number of interpreted live features: {len(latent_df)}")
+
+        # Load constructor config for run
+        with open(scores_path.parent / "run_config.json", "r") as f:
+            run_cfg = orjson.loads(f.read())
+        constructor_cfg = run_cfg.get("constructor_cfg", {})
+        min_examples = constructor_cfg.get("min_examples", None)
+        print("min examples", min_examples)
+
+        if min_examples is not None:
+            uninterpretable_features = sum(
+                [(counts[m] < min_examples).sum() for m in modules]
+            )
+            print(
+                f"Number of features below the interpretation firing"
+                f" count threshold: {uninterpretable_features}"
+            )
 
     plot_roc_curve(latent_df, viz_path)
 
