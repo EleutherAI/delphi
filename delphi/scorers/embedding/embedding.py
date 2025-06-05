@@ -51,7 +51,7 @@ class EmbeddingScorer(Scorer):
         random.shuffle(samples)
         results = self._query(
             record.explanation,
-            samples,  # type: ignore
+            samples,
         )
 
         return ScorerResult(record=record, score=results)
@@ -59,30 +59,31 @@ class EmbeddingScorer(Scorer):
     def call_sync(self, record: LatentRecord) -> list[EmbeddingOutput]:
         return asyncio.run(self.__call__(record))  # type: ignore
 
-    def _prepare(self, record: LatentRecord) -> list[list[Sample]]:
+    def _prepare(self, record: LatentRecord) -> list[Sample]:
         """
         Prepare and shuffle a list of samples for classification.
         """
+        samples = []
 
-        defaults = {
-            "tokenizer": self.tokenizer,
-        }
-        samples = examples_to_samples(
-            record.extra_examples,  # type: ignore
-            distance=-1,
-            **defaults,  # type: ignore
-        )
-
-        for i, examples in enumerate(record.test):
+        if record.extra_examples is not None:
             samples.extend(
                 examples_to_samples(
-                    examples,  # type: ignore
-                    distance=i + 1,
-                    **defaults,  # type: ignore
+                    record.extra_examples,
+                    tokenizer=self.tokenizer,
+                    distance=-1,
                 )
             )
 
-        return samples  # type: ignore
+        for i, example in enumerate(record.test):
+            samples.extend(
+                examples_to_samples(
+                    [example],
+                    tokenizer=self.tokenizer,
+                    distance=i + 1,
+                )
+            )
+
+        return samples
 
     def _query(self, explanation: str, samples: list[Sample]) -> list[EmbeddingOutput]:
         explanation_string = (
@@ -110,7 +111,7 @@ class EmbeddingScorer(Scorer):
 
 def examples_to_samples(
     examples: list[Example],
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: PreTrainedTokenizer | None,
     **sample_kwargs,
 ) -> list[Sample]:
     samples = []
@@ -118,7 +119,7 @@ def examples_to_samples(
         if tokenizer is not None:
             text = "".join(tokenizer.batch_decode(example.tokens))
         else:
-            text = "".join(example.tokens)
+            text = "".join(str(token) for token in example.tokens)
         activations = example.activations.tolist()
         samples.append(
             Sample(
