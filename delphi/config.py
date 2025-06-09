@@ -7,6 +7,38 @@ from simple_parsing import Serializable, field, list_field
 
 
 @dataclass
+class ClientConfig(Serializable):
+    model: str = field(positional=True)
+    """Name of the model to use."""
+
+    provider: Literal["local", "openrouter"] = "local"
+    """Provider to use for the model, local will spin up a local instance of the model,
+    openrouter will use the OpenRouter API."""
+
+    api_key: str = field(default="")
+    """API key for the model. An empty string will throw an
+    error if the provider is openrouter."""
+
+    max_model_len: int = 4096
+    """Maximum length of the model context window."""
+
+    gpu_memory_utilization: float = 0.85
+    """GPU memory utilization for the model."""
+
+    enable_prefix_caching: bool = True
+    """Whether to enable prefix caching for the model."""
+
+    tensor_parallel_size: int = 1
+    """Number of GPUs to use for the model."""
+
+    number_tokens_to_generate: int = 1024
+    """Number of tokens to generate."""
+
+    cache_replies: bool = True
+    """Whether to cache replies for the model."""
+
+
+@dataclass
 class SamplerConfig(Serializable):
     n_examples_train: int = 40
     """Number of examples to sample for latent explanation generation."""

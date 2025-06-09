@@ -1,5 +1,6 @@
 from .contrastive_explainer import ContrastiveExplainer
 from .default.default import DefaultExplainer
+from .default_explainer import DSPyExplainer
 from .explainer import Explainer, explanation_loader, random_explanation_loader
 from .no_op_explainer import NoOpExplainer
 from .single_token_explainer import SingleTokenExplainer
@@ -12,4 +13,5 @@ __all__ = [
     "random_explanation_loader",
     "ContrastiveExplainer",
     "NoOpExplainer",
+    "DSPyExplainer",
 ]
