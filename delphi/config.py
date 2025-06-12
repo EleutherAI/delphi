@@ -19,7 +19,7 @@ class ClientConfig(Serializable):
     """API key for the model. An empty string will throw an
     error if the provider is openrouter."""
 
-    max_model_len: int = 4096
+    max_model_len: int = 8192
     """Maximum length of the model context window."""
 
     gpu_memory_utilization: float = 0.85
