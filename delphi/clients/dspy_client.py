@@ -57,6 +57,7 @@ class DspyClient:
                 str(self.config.gpu_memory_utilization),
                 "--tensor-parallel-size",
                 str(self.config.tensor_parallel_size),
+                "--disable-log-requests",
             ]
             if self.config.enable_prefix_caching:
                 cmd.append("--enable-prefix-caching")
@@ -92,6 +93,7 @@ class DspyClient:
                 api_base=f"{self.base_url}/v1",
                 api_key="local",
                 model_type="chat",
+                max_tokens=self.config.number_tokens_to_generate,
             )
         elif self.config.provider == "openrouter":
             # Use openrouter API
