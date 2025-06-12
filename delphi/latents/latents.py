@@ -75,12 +75,6 @@ class Example:
     activations: Float[Tensor, "ctx_len"]
     """Activation values for the input sequence."""
 
-    str_tokens: list[str] | None = None
-    """Tokenized input sequence as strings."""
-
-    normalized_activations: Optional[Float[Tensor, "ctx_len"]] = None
-    """Activations quantized to integers in [0, 10]."""
-
     @property
     def max_activation(self) -> float:
         """
@@ -98,6 +92,12 @@ class ActivatingExample(Example):
     An example of a latent that activates a model.
     """
 
+    normalized_activations: Optional[Float[Tensor, "ctx_len"]] = None
+    """Activations quantized to integers in [0, 10]."""
+
+    str_tokens: Optional[list[str]] = None
+    """Tokenized input sequence as strings."""
+
     quantile: int = 0
     """The quantile of the activating example."""
 
@@ -107,6 +107,9 @@ class NonActivatingExample(Example):
     """
     An example of a latent that does not activate a model.
     """
+
+    str_tokens: list[str]
+    """Tokenized input sequence as strings."""
 
     distance: float = 0.0
     """
@@ -125,7 +128,7 @@ class LatentRecord:
     """The latent associated with the record."""
 
     examples: list[ActivatingExample] = field(default_factory=list)
-    """Example sequences where the latent activations, assumed to be sorted in
+    """Example sequences where the latent activates, assumed to be sorted in
     descending order by max activation."""
 
     not_active: list[NonActivatingExample] = field(default_factory=list)

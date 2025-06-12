@@ -6,7 +6,7 @@ import torch
 
 from delphi.__main__ import run
 from delphi.config import CacheConfig, ConstructorConfig, RunConfig, SamplerConfig
-from delphi.log.result_analysis import get_metrics, load_data
+from delphi.log.result_analysis import get_agg_metrics, load_data
 
 
 async def test():
@@ -46,7 +46,7 @@ async def test():
         seed=22,
         num_gpus=torch.cuda.device_count(),
         filter_bos=True,
-        verbose=True,
+        verbose=False,
         sampler_cfg=sampler_cfg,
         constructor_cfg=constructor_cfg,
         cache_cfg=cache_cfg,
@@ -59,8 +59,8 @@ async def test():
 
     scores_path = Path.cwd() / "results" / run_cfg.name / "scores"
 
-    latent_df, _ = load_data(scores_path, run_cfg.hookpoints)
-    processed_df = get_metrics(latent_df)
+    latent_df, counts = load_data(scores_path, run_cfg.hookpoints)
+    processed_df = get_agg_metrics(latent_df, counts)
 
     # Performs better than random guessing
     for score_type, df in processed_df.groupby("score_type"):

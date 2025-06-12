@@ -47,7 +47,6 @@ def prepare_non_activating_examples(
         NonActivatingExample(
             tokens=toks,
             activations=acts,
-            normalized_activations=None,
             distance=distance,
             str_tokens=tokenizer.batch_decode(toks),
         )
@@ -281,7 +280,6 @@ def constructor(
         ActivatingExample(
             tokens=toks,
             activations=acts,
-            normalized_activations=None,
         )
         for toks, acts in zip(token_windows, act_windows)
     ]

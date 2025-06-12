@@ -71,7 +71,6 @@ def test_config_file(cache_setup: dict[str, Any]):
     with open(config_path, "r") as f:
         config = json.load(f)
     cache_cfg = cache_setup["cache_cfg"]
-
     assert config["batch_size"] == cache_cfg.batch_size, "Config batch_size mismatch"
-    assert config["cache_ctx_len"] == cache_cfg.cache_ctx_len, "Cache_ctx_len mismatch"
+    assert config["cache_ctx_len"] == cache_cfg.cache_ctx_len, "ctx_len mismatch"
     assert config["n_tokens"] == cache_cfg.n_tokens, "Config n_tokens mismatch"

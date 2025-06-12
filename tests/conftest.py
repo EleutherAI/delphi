@@ -35,14 +35,14 @@ random_text = [
 
 @pytest.fixture(scope="module")
 def tokenizer() -> PreTrainedTokenizer | PreTrainedTokenizerFast:
-    tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-160m")
+    tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")
     tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
 
 
 @pytest.fixture(scope="module")
 def model() -> PreTrainedModel:
-    model = AutoModel.from_pretrained("EleutherAI/pythia-160m")
+    model = AutoModel.from_pretrained("EleutherAI/pythia-70m")
     return model
 
 
@@ -73,7 +73,7 @@ def cache_setup(tmp_path_factory, mock_dataset: torch.Tensor, model: PreTrainedM
         sampler_cfg=SamplerConfig(),
         cache_cfg=cache_cfg,
         model="EleutherAI/pythia-160m",
-        sparse_model="EleutherAI/sae-pythia-160m-32k",
+        sparse_model="EleutherAI/sae-pythia-70m-32k",
         hookpoints=["layers.1"],
     )
     hookpoint_to_sparse_encode, _ = load_hooks_sparse_coders(model, run_cfg_gemma)

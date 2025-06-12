@@ -1,15 +1,17 @@
 import random
 from dataclasses import dataclass
-from typing import NamedTuple
+from typing import NamedTuple, Sequence
 
 import torch
 from simple_parsing import field
 from torch.nn.functional import cross_entropy
-from transformers import PreTrainedTokenizer
 
-from delphi.utils import assert_type
-
-from ...latents import ActivatingExample, Example, LatentRecord
+from ...latents import (
+    ActivatingExample,
+    Example,
+    LatentRecord,
+    NonActivatingExample,
+)
 from ..scorer import Scorer, ScorerResult
 from .prompts import BASEPROMPT as base_prompt
 
@@ -44,21 +46,19 @@ class SurprisalScorer(Scorer):
     def __init__(
         self,
         model,
-        tokenizer,
         verbose: bool,
         batch_size: int,
         **generation_kwargs,
     ):
         self.model = model
         self.verbose = verbose
-        self.tokenizer = tokenizer
         self.batch_size = batch_size
         self.generation_kwargs = generation_kwargs
 
-    async def __call__(  # type: ignore
-        self,  # type: ignore
-        record: LatentRecord,  # type: ignore
-    ) -> ScorerResult:  # type: ignore
+    async def __call__(
+        self,
+        record: LatentRecord,
+    ) -> ScorerResult:
         samples = self._prepare(record)
 
         random.shuffle(samples)
@@ -74,35 +74,25 @@ class SurprisalScorer(Scorer):
         Prepare and shuffle a list of samples for classification.
         """
 
-        defaults = {
-            "tokenizer": self.tokenizer,
-        }
-
         assert record.extra_examples is not None, "No extra examples provided"
         samples = examples_to_samples(
             record.extra_examples,
-            distance=-1,
-            **defaults,
         )
 
-        for i, examples in enumerate(record.test):
-            examples = assert_type(list, examples)
-            samples.extend(
-                examples_to_samples(
-                    examples,
-                    distance=i + 1,
-                    **defaults,
-                )
+        samples.extend(
+            examples_to_samples(
+                record.test,
             )
+        )
 
         return samples
 
     def compute_loss_with_kv_cache(
         self, explanation: str, samples: list[Sample], batch_size=2
     ):
-        # print(explanation_prompt)
         model = self.model
         tokenizer = self.model.tokenizer
+        assert tokenizer is not None, "Tokenizer is not set in model.tokenizer"
         # Tokenize explanation
         tokenizer.padding_side = "right"
         tokenizer.pad_token = tokenizer.eos_token
@@ -187,20 +177,28 @@ class SurprisalScorer(Scorer):
 
 
 def examples_to_samples(
-    examples: list[Example] | list[ActivatingExample],
-    tokenizer: PreTrainedTokenizer,
-    **sample_kwargs,
+    examples: Sequence[Example],
 ) -> list[Sample]:
     samples = []
     for example in examples:
-        text = "".join(tokenizer.batch_decode(example.tokens))
+        assert isinstance(example, ActivatingExample) or isinstance(
+            example, NonActivatingExample
+        )
+        assert example.str_tokens is not None
+        text = "".join(str(token) for token in example.str_tokens)
         activations = example.activations.tolist()
         samples.append(
             Sample(
                 text=text,
                 activations=activations,
                 data=SurprisalOutput(
-                    activations=activations, text=text, **sample_kwargs
+                    activations=activations,
+                    text=text,
+                    distance=(
+                        example.quantile
+                        if isinstance(example, ActivatingExample)
+                        else example.distance
+                    ),
                 ),
             )
         )

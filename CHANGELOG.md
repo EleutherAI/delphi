@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.0.2 (2025-06-02)
+
+### Bug Fixes
+
+- Initial release
+  ([`6efa228`](https://github.com/EleutherAI/delphi/commit/6efa228c8d9c0fddc6cb21760c1adb1d51ffdc77))
+
+
 ## v0.0.1 (2025-04-21)
 
 ### Bug Fixes
