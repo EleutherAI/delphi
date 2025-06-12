@@ -8,6 +8,7 @@ from delphi.clients.client import Client
 from delphi.explainers.explainer import ExplainerResult
 from delphi.latents.latents import LatentRecord
 from delphi.logger import logger
+from dspy.utils.exceptions import AdapterParseError
 
 
 class DSPyExplainer:
@@ -25,7 +26,6 @@ class DSPyExplainer:
         self.generation_kwargs = generation_kwargs
         self.threshold = threshold
         client = self.client.client
-        client = client.copy(max_tokens=1000)
         dspy.configure(lm=client)
         self.explainer = (dspy.ChainOfThought if cot else dspy.Predict)(
             ExplanationSignature
@@ -61,14 +61,14 @@ class DSPyExplainer:
         # result = self.explainer(feature_examples=records, lm=self.client)
         try:
             result = await self.explainer.acall(feature_examples=all_examples)
-        except ValueError:
+        except AdapterParseError:
             logger.error("Error in explainer:")
             traceback.print_exc()
             result = ExplanationSignature(
                 feature_examples=all_examples,
                 shared_features=[""],
                 hypothesis="",
-                explanation="",
+                explanation="Explanation could not be parsed.",
             )
         return ExplainerResult(record, result.explanation)
 
@@ -88,7 +88,8 @@ class ExplanationSignature(dspy.Signature):
     You will be given a list of text examples, each with a list of tokens that activated a classifier,
     - Try to produce a concise final description. Simply describe the text features that are common in the examples, and what patterns you found.
     - If the examples are uninformative, you don't need to mention them.
-    - Don't focus on giving examples of important tokens, but try to summarize the patterns found in the examples.
+    - Try to summarize the patterns found in the examples, mentioning some of the tokens where the pattern is likely to be found.
+    - Don't give over-general explanations.
 
     """
 
