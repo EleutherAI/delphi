@@ -185,16 +185,23 @@ async def simulate_and_score(
     # return scored_sequence_simulations
 
     values = []
-    all_activated = []
-    for distance, sequence in enumerate(scored_sequence_simulations):
-        without_errors = []
+    simulations_per_distance = {}
+    without_errors = []
+    for sequence in enumerate(scored_sequence_simulations):
+        
         if len(sequence.simulation.expected_activations) > 0:
-            without_errors.append(sequence)
+            if sequence.quantile not in simulations_per_distance:
+                simulations_per_distance[sequence.quantile+1] = []
+            simulations_per_distance[sequence.quantile+1].append(sequence)
+            without_errors.extend(sequence)
+    for quantile in simulations_per_distance.key():
         values.append(
-            aggregate_scored_sequence_simulations(without_errors, distance + 1)
+            aggregate_scored_sequence_simulations(simulations_per_distance[quantile], quantile)
         )
-        all_activated.extend(without_errors)
+    
     if len(non_activation_records) > 0:
-        all_data = all_activated + non_activating_scored_seq_simulations
-        values.append(aggregate_scored_sequence_simulations(all_data, 0))
+        for sequence in enumerate(non_activating_records):
+            if len(sequence.simulation.expected_activations) > 0:
+                without_errors.extend(sequence)
+        values.append(aggregate_scored_sequence_simulations(without_errors, 0))
     return values  # type: ignore
