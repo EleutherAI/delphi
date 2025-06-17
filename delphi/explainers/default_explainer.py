@@ -2,13 +2,13 @@ import traceback
 from typing import List
 
 import dspy
+from dspy.utils.exceptions import AdapterParseError
 from pydantic import BaseModel
 
 from delphi.clients.client import Client
 from delphi.explainers.explainer import ExplainerResult
 from delphi.latents.latents import LatentRecord
 from delphi.logger import logger
-from dspy.utils.exceptions import AdapterParseError
 
 
 class DSPyExplainer:
@@ -38,7 +38,7 @@ class DSPyExplainer:
                 trainset=TRAINSET,
             )
 
-    async def __call__(self, record: LatentRecord):
+    async def __call__(self, record: LatentRecord) -> ExplainerResult:
         records = record.train
         all_examples = []
         for ex in records:
@@ -58,7 +58,6 @@ class DSPyExplainer:
                 FeatureExample(text=text, tokens_and_activations=non_zero)
             )
 
-        # result = self.explainer(feature_examples=records, lm=self.client)
         try:
             result = await self.explainer.acall(feature_examples=all_examples)
         except AdapterParseError:
