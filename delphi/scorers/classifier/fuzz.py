@@ -75,7 +75,6 @@ class FuzzingScorer(Classifier, Scorer):
                 tokens=example.tokens,
                 activations=example.activations,
                 str_tokens=example.str_tokens,
-                normalized_activations=example.normalized_activations,
                 distance=-1,
             )
             for example in examples
@@ -107,7 +106,7 @@ class FuzzingScorer(Classifier, Scorer):
                     highlighted=True,
                 )
         elif self.fuzz_type == "active":
-            # hard uses activating examples and
+            # active uses activating examples and
             # highlights non active tokens
             extras = self._convert_to_non_activating(record.test)
             samples = examples_to_samples(
