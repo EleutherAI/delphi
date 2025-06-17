@@ -1,3 +1,4 @@
+from .classifier.classifier_dspy import DspyFuzzer
 from .classifier.fuzz import FuzzingScorer
 from .classifier.intruder import IntruderScorer
 from .embedding.embedding import EmbeddingScorer
@@ -8,6 +9,7 @@ from .surprisal.surprisal import SurprisalScorer
 
 __all__ = [
     "FuzzingScorer",
+    "DspyFuzzer",
     "OpenAISimulator",
     "Scorer",
     "SurprisalScorer",

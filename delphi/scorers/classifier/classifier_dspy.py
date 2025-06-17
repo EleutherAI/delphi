@@ -89,7 +89,7 @@ class DspyFuzzer(DspyClassifier):
     ) -> tuple[str, list[tuple[int, int]]]:
         output = ""
         # branch if highlighting positions are provided
-        if len(positions) == 0:
+        if len(positions) > 0:
             starts, ends = zip(*positions)
             for i, token in enumerate(tokens):
                 if i in starts:
