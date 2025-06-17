@@ -66,7 +66,7 @@ class DspyClient:
             self.server_process = subprocess.Popen(cmd)
 
             # Wait for server to be ready
-            max_wait_time = 300  # 5 minutes
+            max_wait_time = 1000
             wait_interval = 5
             elapsed_time = 0
 
