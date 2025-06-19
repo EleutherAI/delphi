@@ -206,10 +206,7 @@ class LatentCache:
         self.width = None
         self.cache = InMemoryCache(filters, batch_size=batch_size)
         self.hookpoint_firing_counts: dict[str, Tensor] = {}
-
         self.log_path = log_path
-        if filters is not None:
-            self.filter_submodules(filters)
 
     def load_token_batches(
         self, n_tokens: int, tokens: token_tensor_type
@@ -235,21 +232,6 @@ class LatentCache:
         ]
 
         return token_batches
-
-    def filter_submodules(self, filters: dict[str, Float[Tensor, "indices"]]):
-        """
-        Filter submodules based on the provided filters.
-
-        Args:
-            filters: Filters for selecting specific latents.
-        """
-        filtered_submodules = {}
-        for hookpoint in self.hookpoint_to_sparse_encode.keys():
-            if hookpoint in filters:
-                filtered_submodules[hookpoint] = self.hookpoint_to_sparse_encode[
-                    hookpoint
-                ]
-        self.hookpoint_to_sparse_encode = filtered_submodules
 
     def run(self, n_tokens: int, tokens: token_tensor_type):
         """
