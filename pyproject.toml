@@ -53,7 +53,7 @@ include = ["delphi*"]
 
 [tool.ruff]
 # TODO: Clean up or remove experiments folder.
-exclude = ["experiments", "**/prompts/*", "**/prompts.py","**/simulator.py", "**/detection.py", "**/default_explainer.py", "**/classifier_dspy.py"]
+exclude = ["experiments", "**/prompts/*", "**/prompts.py","**/simulator.py", "**/signatures.py"]
 # Avoid automatically removing unused imports in __init__.py files.
 # Such imports will be flagged with a dedicated message suggesting
 # that the import is either added to the module's __all__ symbol
