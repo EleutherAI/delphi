@@ -4,7 +4,6 @@ from typing import Literal, NamedTuple, Optional
 import blobfile as bf
 import orjson
 import torch
-from jaxtyping import Float
 from jaxtyping import Float, Int
 from torch import Tensor
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
