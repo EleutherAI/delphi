@@ -16,17 +16,17 @@ Install this library as a local editable installation. Run the following command
 
 To run the default pipeline from the command line, use the following command:
 
-`python -m delphi meta-llama/Meta-Llama-3-8B EleutherAI/sae-llama-3-8b-32x --explainer_model 'hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4' --dataset_repo 'EleutherAI/fineweb-edu-dedup-10b' --dataset_split 'train[:1%]' --n_tokens 10_000_000 --max_latents 100 --hookpoints layers.5 --filter_bos --name llama-3-8B`
+`python -m delphi meta-llama/Meta-Llama-3-8B EleutherAI/sae-llama-3-8b-32x --n_tokens 10_000_000 --max_latents 100 --hookpoints layers.5 --scorers detection --filter_bos --name llama-3-8B`
 
 This command will:
-1. Cache activations for the first 10 million tokens of the dataset.
-2. Generate explanations for the first 100 features of layer 5 using the specified explainer model.
-3. Score the explanations uses fuzzing and detection scorers.
+1. Cache activations for the first 10 million tokens of the default dataset, `EleutherAI/SmolLM2-135M-10B`.
+2. Generate explanations for the first 100 features of layer 5 using the default explainer model, `hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4`.
+3. Score the explanations using the detection scorer.
 4. Log summary metrics including per-scorer F1 scores and confusion matrices, and produce histograms of the scorer classification accuracies.
 
 The pipeline is highly configurable and can also be called programmatically (see the [end-to-end test](https://github.com/EleutherAI/delphi/blob/main/delphi/tests/e2e.py) for an example).
 
-To use other scorer types, instantiate a custom pipeline. You can take inspiration from the main pipeline in [delphi.\_\_main\_\_](https://github.com/EleutherAI/delphi/blob/main/delphi/__main__.py).
+To use experimental features, create a custom pipeline. You can take inspiration from the main pipeline in [delphi.\_\_main\_\_](https://github.com/EleutherAI/delphi/blob/main/delphi/__main__.py).
 
 ## Caching
 
@@ -36,7 +36,7 @@ The first step to generate explanations is to cache sparse model activations. To
 from sparsify.data import chunk_and_tokenize
 from delphi.latents import LatentCache
 
-data = load_dataset("EleutherAI/rpj-v2-sample", split="train[:1%]")
+data = load_dataset("EleutherAI/SmolLM2-135M-10B", split="train[:1%]")
 tokens = chunk_and_tokenize(data, tokenizer, max_seq_len=256, text_key="raw_content")["input_ids"]
 
 cache = LatentCache(
@@ -279,6 +279,8 @@ pytest .
 Run an end-to-end test:
 
 ```python -m delphi.tests.e2e```
+
+We use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for releases.
 
 ## License
 

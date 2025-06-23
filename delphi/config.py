@@ -17,11 +17,14 @@ class SamplerConfig(Serializable):
     n_quantiles: int = 10
     """Number of latent activation quantiles to sample."""
 
-    train_type: Literal["top", "random", "quantiles"] = "quantiles"
+    train_type: Literal["top", "random", "quantiles", "mix"] = "quantiles"
     """Type of sampler to use for latent explanation generation."""
 
     test_type: Literal["quantiles"] = "quantiles"
     """Type of sampler to use for latent explanation testing."""
+
+    ratio_top: float = 0.2
+    """Ratio of top examples to use for training, if using mix."""
 
 
 @dataclass
@@ -45,11 +48,14 @@ class ConstructorConfig(Serializable):
     If the number of examples is less than this, the
     latent will not be explained and scored."""
 
-    max_examples: int = 10_000
-    """Maximum number of activating examples to generate for a single latent."""
-
     n_non_activating: int = 50
     """Number of non-activating examples to be constructed."""
+
+    center_examples: bool = True
+    """Whether to center the examples on the latent activation.
+    If True, the examples will be centered on the latent activation.
+    Otherwise, windows will be used, and the activating example can be anywhere
+    window."""
 
     non_activating_source: Literal["random", "neighbours", "FAISS"] = "random"
     """Source of non-activating examples. Random uses non-activating contexts
@@ -66,7 +72,7 @@ class ConstructorConfig(Serializable):
 
 @dataclass
 class CacheConfig(Serializable):
-    dataset_repo: str = "EleutherAI/fineweb-edu-dedup-10b"
+    dataset_repo: str = "EleutherAI/SmolLM2-135M-10B"
     """Dataset repository to use for generating latent activations."""
 
     dataset_split: str = "train[:1%]"
@@ -125,13 +131,35 @@ class RunConfig(Serializable):
     explainer_model_max_len: int = field(
         default=5120,
     )
-    """Maximum length of the explainer model context window."""
+    """Maximum length of the explainer model context window. For simulation scoring
+    this length should be increased."""
 
     explainer_provider: str = field(
         default="offline",
     )
     """Provider to use for explanation and scoring. Options are 'offline' for local
     models and 'openrouter' for API calls."""
+
+    explainer: str = field(
+        choices=["default", "none"],
+        default="default",
+    )
+    """Explainer to use for generating explanations. Options are 'default' for
+    the default single token explainer, and 'none' for no explanation generation."""
+
+    scorers: list[str] = list_field(
+        choices=[
+            "fuzz",
+            "detection",
+            "simulation",
+        ],
+        default=[
+            "fuzz",
+            "detection",
+        ],
+    )
+    """Scorer methods to score latent explanations. Options are 'fuzz', 'detection', and
+    'simulation'."""
 
     name: str = ""
     """The name of the run. Results are saved in a directory with this name."""
@@ -142,10 +170,15 @@ class RunConfig(Serializable):
     filter_bos: bool = False
     """Whether to filter out BOS tokens from the cache."""
 
+    log_probs: bool = False
+    """Whether to attempt to gather log probabilities for each scorer prompt."""
+
     load_in_8bit: bool = False
     """Load the model in 8-bit mode."""
 
-    hf_token: str | None = None
+    # Use a dummy encoding function to prevent the token from being saved
+    # to disk in plain text
+    hf_token: str | None = field(default=None, encoding_fn=lambda _: None)
     """Huggingface API token for downloading models."""
 
     pipeline_num_proc: int = field(

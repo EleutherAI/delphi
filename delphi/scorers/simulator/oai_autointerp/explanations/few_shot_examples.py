@@ -83,10 +83,12 @@ TEST_EXAMPLES = [
             ActivationRecord(
                 tokens=["a", "b", "c"],
                 activations=[1.0, 0.0, 0.0],
+                quantile=1,
             ),
             ActivationRecord(
                 tokens=["d", "e", "f"],
                 activations=[0.0, 1.0, 0.0],
+                quantile=1,
             ),
         ],
         explanation="vowels",
@@ -99,6 +101,7 @@ TEST_SINGLE_TOKEN_EXAMPLE = Example(
         ActivationRecord(
             activations=[0.0, 0.0, 1.0],
             tokens=["g", "h", "i"],
+            quantile=1,
         ),
     ],
     first_revealed_activation_indices=[],
@@ -183,6 +186,7 @@ ORIGINAL_EXAMPLES = [
                     4.24,
                     -1.51,
                 ],
+                quantile=1,
             ),
             ActivationRecord(
                 tokens=[
@@ -233,6 +237,7 @@ ORIGINAL_EXAMPLES = [
                     -1.32,
                     -1.92,
                 ],
+                quantile=1,
             ),
         ],
         first_revealed_activation_indices=[10, 3],
@@ -287,6 +292,7 @@ ORIGINAL_EXAMPLES = [
                     -1.46,
                     -0.6,
                 ],
+                quantile=1,
             ),
             ActivationRecord(
                 tokens=[
@@ -367,6 +373,7 @@ ORIGINAL_EXAMPLES = [
                     -0.5,
                     -0.62,
                 ],
+                quantile=1,
             ),
         ],
         first_revealed_activation_indices=[5, 20],
@@ -401,6 +408,7 @@ ORIGINAL_EXAMPLES = [
                     0,
                     0,
                 ],
+                quantile=1,
             ),
             ActivationRecord(
                 tokens=[
@@ -449,6 +457,7 @@ ORIGINAL_EXAMPLES = [
                     1.7,
                     -0.89,
                 ],
+                quantile=1,
             ),
         ],
         first_revealed_activation_indices=[0, 10],
@@ -617,6 +626,7 @@ NEWER_EXAMPLES = [
                     0,
                     0,
                 ],
+                quantile=1,
             ),
             # We sometimes exceed the max context size when this is included :(
             # ActivationRecord(
@@ -900,6 +910,7 @@ NEWER_EXAMPLES = [
                     0,
                     0,
                 ],
+                quantile=1,
             ),
             ActivationRecord(
                 tokens=[
@@ -978,6 +989,7 @@ NEWER_EXAMPLES = [
                     0,
                     0,
                 ],
+                quantile=1,
             ),
         ],
         first_revealed_activation_indices=[2, 8],
@@ -1037,6 +1049,7 @@ NEWER_SINGLE_TOKEN_EXAMPLE = Example(
                 # associated token don't actually appear anywhere in the prompt.
                 0.45,
             ],
+            quantile=1,
         ),
     ],
     first_revealed_activation_indices=[],
@@ -1059,6 +1072,7 @@ JL_FINE_TUNED_EXAMPLES = [
                     ".",
                 ],
                 activations=[0, 0, 0, 0, 0, 0, 0],
+                quantile=-1,
             ),
         ],
         first_revealed_activation_indices=[],
@@ -1077,6 +1091,7 @@ JL_FINE_TUNED_EXAMPLES = [
                     ".",
                 ],
                 activations=[0, 10, 0, 0, 0, 0, 0],
+                quantile=1,
             ),
         ],
         first_revealed_activation_indices=[],
@@ -1094,6 +1109,7 @@ JL_FINE_TUNED_EXAMPLES = [
                     ".",
                 ],
                 activations=[0, 0, 0, 0, 10, 0],
+                quantile=1,
             ),
         ],
         first_revealed_activation_indices=[],
@@ -1118,6 +1134,7 @@ JL_FINE_TUNED_EXAMPLES = [
                     "!",
                 ],
                 activations=[0, 0, 0, 10, 0, 0, 0, 0, 10, 0, 0, 0, 0],
+                quantile=1,
             ),
         ],
         first_revealed_activation_indices=[],
@@ -1176,6 +1193,7 @@ NEWER_SINGLE_TOKEN_EXAMPLE = Example(
                 # associated token don't actually appear anywhere in the prompt.
                 0.45,
             ],
+            quantile=1,
         ),
     ],
     first_revealed_activation_indices=[],

@@ -4,8 +4,9 @@ from typing import NamedTuple
 
 import torch
 
+from delphi import logger
+
 from ...latents import ActivatingExample, NonActivatingExample
-from ...logger import logger
 
 L = "<<"
 R = ">>"
@@ -82,12 +83,13 @@ def examples_to_samples(
 
 
 def _prepare_text(
-    example,
+    example: ActivatingExample | NonActivatingExample,
     n_incorrect: int,
     threshold: float,
     highlighted: bool,
 ) -> tuple[str, list[str]]:
     str_toks = example.str_tokens
+    assert str_toks is not None, "str_toks were not set"
     clean = "".join(str_toks)
     # Just return text if there's no highlighting
     if not highlighted:
@@ -117,7 +119,20 @@ def _prepare_text(
 
     n_incorrect = min(n_incorrect, len(below_threshold))
 
-    random_indices = set(random.sample(below_threshold.tolist(), n_incorrect))
+    # The activating token is always ctx_len - ctx_len//4
+    # so we always highlight this one, and if  n_incorrect > 1
+    # we highlight n_incorrect-1 random ones
+    token_pos = len(str_toks) - len(str_toks) // 4
+    if token_pos in below_threshold:
+        random_indices = [token_pos]
+        if n_incorrect > 1:
+            random_indices.extend(
+                random.sample(below_threshold.tolist(), n_incorrect - 1)
+            )
+    else:
+        random_indices = random.sample(below_threshold.tolist(), n_incorrect)
+
+    random_indices = set(random_indices)
 
     def check(i):
         return i in random_indices

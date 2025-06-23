@@ -3,12 +3,14 @@ import json
 import random
 import re
 from abc import abstractmethod
+from typing import Any, Literal
 
 import numpy as np
 
-from ...clients.client import Client
+from delphi import logger
+
+from ...clients.client import Client, Response
 from ...latents import LatentRecord
-from ...logger import logger
 from ..scorer import Scorer, ScorerResult
 from .sample import ClassifierOutput, Sample
 
@@ -20,6 +22,7 @@ class Classifier(Scorer):
         verbose: bool,
         n_examples_shown: int,
         log_prob: bool,
+        seed: int = 42,
         **generation_kwargs,
     ):
         """
@@ -40,24 +43,25 @@ class Classifier(Scorer):
         self.n_examples_shown = n_examples_shown
         self.generation_kwargs = generation_kwargs
         self.log_prob = log_prob
+        self.rng = random.Random(seed)
 
-    async def __call__(  # type: ignore
-        self,  # type: ignore
-        record: LatentRecord,  # type: ignore
-    ) -> ScorerResult:  # type: ignore
+    async def __call__(
+        self,
+        record: LatentRecord,
+    ) -> ScorerResult:
         samples = self._prepare(record)
-        random.shuffle(samples)
+        self.rng.shuffle(samples)
 
-        samples = self._batch(samples)
+        batched_samples = self._batch(samples)
         results = await self._query(
             record.explanation,
-            samples,
+            batched_samples,
         )
 
         return ScorerResult(record=record, score=results)
 
     @abstractmethod
-    def _prepare(self, record: LatentRecord) -> list[list[Sample]]:
+    def _prepare(self, record: LatentRecord) -> list[Sample]:
         pass
 
     async def _query(
@@ -94,25 +98,26 @@ class Classifier(Scorer):
         try:
             response = await self.client.generate(prompt, **self.generation_kwargs)
         except Exception as e:
-            logger.error(f"Error generating text: {e}")
+            logger.error(f"Error generating text: {repr(e)}")
             response = None
         if response is None:
             predictions = [None] * self.n_examples_shown
             probabilities = [None] * self.n_examples_shown
         else:
+            assert isinstance(response, Response)
             selections = response.text
             logprobs = response.logprobs if self.log_prob else None
             try:
                 predictions, probabilities = self._parse(selections, logprobs)
             except Exception as e:
-                logger.error(f"Parsing selections failed: {e}")
+                logger.error(f"Parsing selections failed: {repr(e)}")
                 predictions = [None] * self.n_examples_shown
                 probabilities = [None] * self.n_examples_shown
 
         results = []
         for sample, prediction, probability in zip(batch, predictions, probabilities):
             result = sample.data
-            result.prediction = prediction
+            result.prediction = bool(prediction) if prediction is not None else None
             if prediction is not None:
                 result.correct = prediction == result.activating
             else:
@@ -128,7 +133,9 @@ class Classifier(Scorer):
                 )
         return results
 
-    def _parse(self, string, logprobs=None):
+    def _parse(
+        self, string: str, logprobs: list[float] | None = None
+    ) -> tuple[list[bool], list[float] | list[None]]:
         """Extract binary predictions and probabilities from a string and
         optionally its token logprobs."""
         # Matches the first instance of text enclosed in square brackets
@@ -136,7 +143,7 @@ class Classifier(Scorer):
         match = re.search(pattern, string)
         if match is None:
             raise ValueError("No match found in string")
-        predictions: list[bool] = json.loads(match.group(0))
+        predictions: list[bool | Literal[0, 1]] = json.loads(match.group(0))
         assert len(predictions) == self.n_examples_shown
         probabilities = (
             self._parse_logprobs(logprobs)
@@ -146,7 +153,7 @@ class Classifier(Scorer):
 
         return predictions, probabilities
 
-    def _parse_logprobs(self, logprobs: list):
+    def _parse_logprobs(self, logprobs: list[Any]) -> list[float]:
         """
         Extracts normalized probabilities of '1' vs '0' tokens from the top n
         log probabilities for each token in a response string of form '[x, x, x, ...]'.
@@ -202,7 +209,7 @@ class Classifier(Scorer):
     def prompt(self, examples: str, explanation: str) -> list[dict]:
         pass
 
-    def _batch(self, samples):
+    def _batch(self, samples: list[Sample]) -> list[list[Sample]]:
         return [
             samples[i : i + self.n_examples_shown]
             for i in range(0, len(samples), self.n_examples_shown)

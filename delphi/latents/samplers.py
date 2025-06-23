@@ -1,8 +1,14 @@
 import random
 from typing import Literal
 
+from transformers import (
+    PreTrainedTokenizer,
+    PreTrainedTokenizerFast,
+)
+
+from delphi import logger
+
 from ..config import SamplerConfig
-from ..logger import logger
 from .latents import ActivatingExample, LatentRecord
 
 
@@ -12,7 +18,7 @@ def normalize_activations(
     max_activation = max(max_activation, eps)
     for example in examples:
         example.normalized_activations = (
-            (example.activations * 10 / max_activation).floor().clamp(0, 10)
+            (example.activations * 10 / max_activation).ceil().clamp(0, 10)
         )
     return examples
 
@@ -52,9 +58,10 @@ def train(
     examples: list[ActivatingExample],
     max_activation: float,
     n_train: int,
-    train_type: Literal["top", "random", "quantiles"],
+    train_type: Literal["top", "random", "quantiles", "mix"],
     n_quantiles: int = 10,
     seed: int = 22,
+    ratio_top: float = 0.2,
 ):
     match train_type:
         case "top":
@@ -68,12 +75,23 @@ def train(
                 logger.warning(
                     "n_train is greater than the number of examples, using all examples"
                 )
-
-            selected_examples = random.sample(examples, n_train)
+                selected_examples = examples
+            else:
+                selected_examples = random.sample(examples, n_train)
             selected_examples = normalize_activations(selected_examples, max_activation)
             return selected_examples
         case "quantiles":
             selected_examples = split_quantiles(examples, n_quantiles, n_train)
+            selected_examples = normalize_activations(selected_examples, max_activation)
+            return selected_examples
+        case "mix":
+            top_examples = examples[: int(n_train * ratio_top)]
+            quantiles_examples = split_quantiles(
+                examples[int(n_train * ratio_top) :],
+                n_quantiles,
+                int(n_train * (1 - ratio_top)),
+            )
+            selected_examples = top_examples + quantiles_examples
             selected_examples = normalize_activations(selected_examples, max_activation)
             return selected_examples
 
@@ -83,20 +101,19 @@ def test(
     max_activation: float,
     n_test: int,
     n_quantiles: int,
-    test_type: Literal["quantiles", "activation"],
+    test_type: Literal["quantiles"],
 ):
     match test_type:
         case "quantiles":
             selected_examples = split_quantiles(examples, n_quantiles, n_test)
             selected_examples = normalize_activations(selected_examples, max_activation)
             return selected_examples
-        case "activation":
-            raise NotImplementedError("Activation sampling not implemented")
 
 
 def sampler(
     record: LatentRecord,
     cfg: SamplerConfig,
+    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
 ):
     examples = record.examples
     max_activation = record.max_activation
@@ -106,7 +123,12 @@ def sampler(
         cfg.n_examples_train,
         cfg.train_type,
         n_quantiles=cfg.n_quantiles,
+        ratio_top=cfg.ratio_top,
     )
+    # Moved tokenization to sampler to avoid tokenizing
+    # examples that are not going to be used
+    for example in _train:
+        example.str_tokens = tokenizer.batch_decode(example.tokens)
     record.train = _train
     if cfg.n_examples_test > 0:
         _test = test(
@@ -116,5 +138,7 @@ def sampler(
             cfg.n_quantiles,
             cfg.test_type,
         )
+        for example in _test:
+            example.str_tokens = tokenizer.batch_decode(example.tokens)
         record.test = _test
     return record

@@ -5,6 +5,7 @@ import blobfile as bf
 import orjson
 import torch
 from jaxtyping import Float
+from jaxtyping import Float, Int
 from torch import Tensor
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -36,7 +37,7 @@ class ActivationData(NamedTuple):
     Represents the activation data for a latent.
     """
 
-    locations: Float[Tensor, "n_examples 2"]
+    locations: Int[Tensor, "n_examples 3"]
     """Tensor of latent locations."""
 
     activations: Float[Tensor, "n_examples"]
@@ -70,17 +71,11 @@ class Example:
     A single example of latent data.
     """
 
-    tokens: Float[Tensor, "ctx_len"]
+    tokens: Int[Tensor, "ctx_len"]
     """Tokenized input sequence."""
 
     activations: Float[Tensor, "ctx_len"]
     """Activation values for the input sequence."""
-
-    str_tokens: list[str]
-    """Tokenized input sequence as strings."""
-
-    normalized_activations: Optional[Float[Tensor, "ctx_len"]] = None
-    """Activations quantized to integers in [0, 10]."""
 
     @property
     def max_activation(self) -> float:
@@ -99,6 +94,12 @@ class ActivatingExample(Example):
     An example of a latent that activates a model.
     """
 
+    normalized_activations: Optional[Float[Tensor, "ctx_len"]] = None
+    """Activations quantized to integers in [0, 10]."""
+
+    str_tokens: Optional[list[str]] = None
+    """Tokenized input sequence as strings."""
+
     quantile: int = 0
     """The quantile of the activating example."""
 
@@ -108,6 +109,9 @@ class NonActivatingExample(Example):
     """
     An example of a latent that does not activate a model.
     """
+
+    str_tokens: list[str]
+    """Tokenized input sequence as strings."""
 
     distance: float = 0.0
     """
@@ -126,7 +130,7 @@ class LatentRecord:
     """The latent associated with the record."""
 
     examples: list[ActivatingExample] = field(default_factory=list)
-    """Example sequences where the latent activations, assumed to be sorted in
+    """Example sequences where the latent activates, assumed to be sorted in
     descending order by max activation."""
 
     not_active: list[NonActivatingExample] = field(default_factory=list)
@@ -135,7 +139,7 @@ class LatentRecord:
     train: list[ActivatingExample] = field(default_factory=list)
     """Training examples."""
 
-    test: list[ActivatingExample] | list[list[Example]] = field(default_factory=list)
+    test: list[ActivatingExample] = field(default_factory=list)
     """Test examples."""
 
     neighbours: list[Neighbour] = field(default_factory=list)
@@ -146,6 +150,13 @@ class LatentRecord:
 
     extra_examples: Optional[list[Example]] = None
     """Extra examples to include in the record."""
+
+    per_token_frequency: float = 0.0
+    """Frequency of the latent. Number of activations per total number of tokens."""
+
+    per_context_frequency: float = 0.0
+    """Frequency of the latent. Number of activations in a context per total
+    number of contexts."""
 
     @property
     def max_activation(self) -> float:

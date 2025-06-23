@@ -81,9 +81,9 @@ class ScoredSequenceSimulation(Serializable):
 
     simulation: SequenceSimulation
     """The result of a simulation of neuron activations."""
-    true_activations: list[float]
+    true_activations: list[int]
     """Ground truth activations on the sequence (not normalized)"""
-    ev_correlation_score: float
+    ev_correlation_score: float | str
     """
     Correlation coefficient between the expected values of the normalized activations
     from the simulation and the unnormalized true activations of the neuron on the text
@@ -107,7 +107,7 @@ class ScoredSimulation(Serializable):
 
     scored_sequence_simulations: list[ScoredSequenceSimulation]
     """ScoredSequenceSimulation for each sequence"""
-    ev_correlation_score: Optional[float] = None
+    ev_correlation_score: Optional[float | str] = None
     """
     Correlation coefficient between the expected values of the normalized activations
     from the simulation and the unnormalized true activations on a dataset created from
@@ -121,7 +121,7 @@ class ScoredSimulation(Serializable):
     absolute_dev_explained_score = 1 - mean(abs(real-predicted))/ mean(abs(real)).
     """
 
-    def get_preferred_score(self) -> Optional[float]:
+    def get_preferred_score(self) -> Optional[float | str]:
         """
         This method may return None in cases where the score is undefined, for example
         if the normalized activations were all zero, yielding a correlation coefficient
@@ -140,7 +140,7 @@ class ScoredExplanation(Serializable):
     scored_simulation: ScoredSimulation
     """Result of scoring the neuron simulator on multiple sequences."""
 
-    def get_preferred_score(self) -> Optional[float]:
+    def get_preferred_score(self) -> Optional[float | str]:
         """
         This method may return None in cases where the score is undefined, for example
         if the normalized activations were all zero, yielding a correlation coefficient

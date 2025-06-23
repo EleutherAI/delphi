@@ -1,8 +1,8 @@
 import json
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 import torch
@@ -12,11 +12,53 @@ from torch import Tensor
 from tqdm import tqdm
 from transformers import PreTrainedModel
 
+from delphi import logger
 from delphi.config import CacheConfig
 from delphi.latents.collect_activations import collect_activations
 
-location_tensor_shape = Float[Tensor, "batch sequence num_latents"]
-token_tensor_shape = Float[Tensor, "batch sequence"]
+location_tensor_type = Int[Tensor, "batch_sequence 3"]
+activation_tensor_type = Float[Tensor, "batch_sequence"]
+token_tensor_type = Int[Tensor, "batch sequence"]
+latent_tensor_type = Float[Tensor, "batch sequence num_latents"]
+
+
+def get_nonzeros_batch(
+    latents: latent_tensor_type,
+) -> tuple[
+    Float[Tensor, "batch sequence num_latents"], Float[Tensor, "batch sequence "]
+]:
+    """
+    Get non-zero activations for large batches that exceed int32 max value.
+
+    Args:
+        latents: Input latent activations.
+
+    Returns:
+        tuple[Tensor, Tensor]: Non-zero latent locations and activations.
+    """
+    # Calculate the maximum batch size that fits within sys.maxsize
+    max_batch_size = torch.iinfo(torch.int32).max // (
+        latents.shape[1] * latents.shape[2]
+    )
+    nonzero_latent_locations = []
+    nonzero_latent_activations = []
+
+    for i in range(0, latents.shape[0], max_batch_size):
+        batch = latents[i : i + max_batch_size]
+
+        # Get nonzero locations and activations
+        batch_locations = torch.nonzero(batch.abs() > 1e-5)
+        batch_activations = batch[batch.abs() > 1e-5]
+
+        # Adjust indices to account for batching
+        batch_locations[:, 0] += i
+        nonzero_latent_locations.append(batch_locations)
+        nonzero_latent_activations.append(batch_activations)
+
+    # Concatenate results
+    nonzero_latent_locations = torch.cat(nonzero_latent_locations, dim=0)
+    nonzero_latent_activations = torch.cat(nonzero_latent_activations, dim=0)
+    return nonzero_latent_locations, nonzero_latent_activations
 
 
 class InMemoryCache:
@@ -37,25 +79,25 @@ class InMemoryCache:
             filters: Filters for selecting specific latents.
             batch_size: Size of batches for processing. Defaults to 64.
         """
-        self.latent_locations_batches: dict[str, list[location_tensor_shape]] = (
+        self.latent_locations_batches: dict[str, list[location_tensor_type]] = (
             defaultdict(list)
         )
-        self.latent_activations_batches: dict[str, list[location_tensor_shape]] = (
+        self.latent_activations_batches: dict[str, list[latent_tensor_type]] = (
             defaultdict(list)
         )
-        self.tokens_batches: dict[str, list[token_tensor_shape]] = defaultdict(list)
+        self.tokens_batches: dict[str, list[token_tensor_type]] = defaultdict(list)
 
-        self.latent_locations: dict[str, location_tensor_shape] = {}
-        self.latent_activations: dict[str, location_tensor_shape] = {}
-        self.tokens: dict[str, token_tensor_shape] = {}
+        self.latent_locations: dict[str, location_tensor_type] = {}
+        self.latent_activations: dict[str, latent_tensor_type] = {}
+        self.tokens: dict[str, token_tensor_type] = {}
 
         self.filters = filters
         self.batch_size = batch_size
 
     def add(
         self,
-        latents: location_tensor_shape,
-        tokens: token_tensor_shape,
+        latents: latent_tensor_type,
+        tokens: token_tensor_type,
         batch_number: int,
         module_path: str,
     ):
@@ -96,47 +138,9 @@ class InMemoryCache:
                 self.tokens_batches[module_path], dim=0
             )
 
-    def get_nonzeros_batch(
-        self, latents: location_tensor_shape
-    ) -> tuple[
-        Float[Tensor, "batch sequence num_latents"], Float[Tensor, "batch sequence "]
-    ]:
-        """
-        Get non-zero activations for large batches that exceed int32 max value.
-
-        Args:
-            latents: Input latent activations.
-
-        Returns:
-            tuple[Tensor, Tensor]: Non-zero latent locations and activations.
-        """
-        # Calculate the maximum batch size that fits within sys.maxsize
-        max_batch_size = torch.iinfo(torch.int32).max // (
-            latents.shape[1] * latents.shape[2]
-        )
-        nonzero_latent_locations = []
-        nonzero_latent_activations = []
-
-        for i in range(0, latents.shape[0], max_batch_size):
-            batch = latents[i : i + max_batch_size]
-
-            # Get nonzero locations and activations
-            batch_locations = torch.nonzero(batch.abs() > 1e-5)
-            batch_activations = batch[batch.abs() > 1e-5]
-
-            # Adjust indices to account for batching
-            batch_locations[:, 0] += i
-            nonzero_latent_locations.append(batch_locations)
-            nonzero_latent_activations.append(batch_activations)
-
-        # Concatenate results
-        nonzero_latent_locations = torch.cat(nonzero_latent_locations, dim=0)
-        nonzero_latent_activations = torch.cat(nonzero_latent_activations, dim=0)
-        return nonzero_latent_locations, nonzero_latent_activations
-
-    def get_nonzeros(self, latents: location_tensor_shape, module_path: str) -> tuple[
-        location_tensor_shape,
-        location_tensor_shape,
+    def get_nonzeros(self, latents: latent_tensor_type, module_path: str) -> tuple[
+        location_tensor_type,
+        activation_tensor_type,
     ]:
         """
         Get the nonzero latent locations and activations.
@@ -153,7 +157,7 @@ class InMemoryCache:
             (
                 nonzero_latent_locations,
                 nonzero_latent_activations,
-            ) = self.get_nonzeros_batch(latents)
+            ) = get_nonzeros_batch(latents)
         else:
             nonzero_latent_locations = torch.nonzero(latents.abs() > 1e-5)
             nonzero_latent_activations = latents[latents.abs() > 1e-5]
@@ -209,8 +213,8 @@ class LatentCache:
             self.filter_submodules(filters)
 
     def load_token_batches(
-        self, n_tokens: int, tokens: token_tensor_shape
-    ) -> list[token_tensor_shape]:
+        self, n_tokens: int, tokens: token_tensor_type
+    ) -> list[token_tensor_type]:
         """
         Load and prepare token batches for processing.
 
@@ -248,7 +252,7 @@ class LatentCache:
                 ]
         self.hookpoint_to_sparse_encode = filtered_submodules
 
-    def run(self, n_tokens: int, tokens: token_tensor_shape):
+    def run(self, n_tokens: int, tokens: token_tensor_type):
         """
         Run the latent caching process.
 
@@ -295,7 +299,7 @@ class LatentCache:
                 pbar.update(1)
                 pbar.set_postfix({"Total Tokens": f"{total_tokens:,}"})
 
-        print(f"Total tokens processed: {total_tokens:,}")
+        logger.info(f"Total tokens processed: {total_tokens:,}")
         self.cache.save()
         self.save_firing_counts()
 
@@ -371,8 +375,8 @@ class LatentCache:
                     masked_locations = masked_locations.astype(np.uint16)
                 else:
                     masked_locations = masked_locations.astype(np.uint32)
-                    print(
-                        "Warning: Increasing the number of splits might reduce the"
+                    logger.warning(
+                        "Increasing the number of splits might reduce the"
                         "memory usage of the cache."
                     )
 
@@ -396,10 +400,10 @@ class LatentCache:
         to the console.
         """
         assert self.width is not None, "Width must be set before generating statistics"
-        print("Feature statistics:")
+        logger.info("Feature statistics:")
         # Token frequency
         for module_path in self.cache.latent_locations.keys():
-            print(f"# Module: {module_path}")
+            logger.info(f"# Module: {module_path}")
             generate_statistics_cache(
                 self.cache.tokens[module_path],
                 self.cache.latent_locations[module_path],
@@ -429,12 +433,17 @@ class LatentCache:
         Save the firing counts for the cached latents.
         """
         if self.log_path is None:
-            log_path = Path.cwd() / "results" / "log" / "hookpoint_firing_counts.pt"
-        else:
-            log_path = self.log_path / "hookpoint_firing_counts.pt"
+            return
 
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(self.hookpoint_firing_counts, log_path)
+        file_path = self.log_path / "hookpoint_firing_counts.pt"
+
+        if file_path.exists():
+            existing_firing_counts = torch.load(file_path, weights_only=True)
+            for hookpoint, counts in existing_firing_counts.items():
+                if hookpoint not in self.hookpoint_firing_counts:
+                    self.hookpoint_firing_counts[hookpoint] = counts
+
+        torch.save(self.hookpoint_firing_counts, file_path)
 
 
 @dataclass
@@ -474,7 +483,8 @@ def generate_statistics_cache(
     # torch always sorts for unique, so we might as well do it
     sorted_latents, latent_indices = latents.sort()
     sorted_activations = activations[latent_indices]
-    sorted_tokens = tokens[latent_locations[latent_indices]]
+    locations = latent_locations[latent_indices]
+    sorted_tokens = tokens[locations[:, 0], locations[:, 1]]
 
     unique_latents, counts = torch.unique_consecutive(
         sorted_latents, return_counts=True
@@ -484,7 +494,7 @@ def generate_statistics_cache(
     num_alive = counts.shape[0]
     fraction_alive = num_alive / width
     if verbose:
-        print(f"Fraction of latents alive: {fraction_alive:%}")
+        logger.info(f"Fraction of latents alive: {fraction_alive:%}")
     # Compute densities of latents
     densities = counts / total_n_tokens
 
@@ -493,8 +503,12 @@ def generate_statistics_cache(
     # How many fired more than 10% of the time
     ten_percent = (densities > 0.1).sum() / width
     if verbose:
-        print(f"Fraction of latents fired more than 1% of the time: {one_percent:%}")
-        print(f"Fraction of latents fired more than 10% of the time: {ten_percent:%}")
+        logger.info(
+            f"Fraction of latents fired more than 1% of the time: {one_percent:%}"
+        )
+        logger.info(
+            f"Fraction of latents fired more than 10% of the time: {ten_percent:%}"
+        )
     # Try to estimate simple feature frequency
     split_indices = torch.cumsum(counts, dim=0)
     activation_splits = torch.tensor_split(sorted_activations, split_indices[:-1])
@@ -516,15 +530,17 @@ def generate_statistics_cache(
     single_token_fraction = maybe_single_token_features / num_alive
     strong_token_fraction = num_single_token_features / num_alive
     if verbose:
-        print(f"Fraction of weak single token latents: {single_token_fraction:%}")
-        print(f"Fraction of strong single token latents: {strong_token_fraction:%}")
+        logger.info(f"Fraction of weak single token latents: {single_token_fraction:%}")
+        logger.info(
+            f"Fraction of strong single token latents: {strong_token_fraction:%}"
+        )
 
     return CacheStatistics(
-        frac_alive=fraction_alive,
-        frac_fired_1pct=one_percent,
-        frac_fired_10pct=ten_percent,
-        frac_weak_single_token=single_token_fraction,
-        frac_strong_single_token=strong_token_fraction,
+        frac_alive=float(fraction_alive),
+        frac_fired_1pct=float(one_percent),
+        frac_fired_10pct=float(ten_percent),
+        frac_weak_single_token=float(single_token_fraction),
+        frac_strong_single_token=float(strong_token_fraction),
     )
 
 

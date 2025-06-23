@@ -25,7 +25,9 @@ def collect_activations(
     handles = []
 
     def create_hook(hookpoint: str, transcode: bool = False):
-        def hook_fn(module: nn.Module, input: Any, output: Tensor) -> Tensor | None:
+        def hook_fn(
+            module: nn.Module, input: Any, output: Tensor | tuple[Tensor]
+        ) -> Tensor | None:
             # If output is a tuple (like in some transformer layers), take first element
             if transcode:
                 if isinstance(input, tuple):

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -78,7 +79,7 @@ async def _simulate_and_score_sequence(
     scored_sequence_simulation = ScoredSequenceSimulation(
         distance=quantile,
         simulation=simulation,
-        true_activations=activations.activations.tolist(),  # type: ignore
+        true_activations=activations.activations,
         ev_correlation_score=score_from_simulation(
             activations, simulation, correlation_score
         ),
@@ -95,19 +96,18 @@ def fix_nan(val):
         return float(val)
 
 
-def default(scored_simulation):
+def default(scored_simulation: ScoredSequenceSimulation) -> ScoredSequenceSimulation:
     ev_correlation_score = scored_simulation.ev_correlation_score
 
     ev_correlation_score = fix_nan(ev_correlation_score)
 
-    return {
-        "tokens": scored_simulation.simulation.tokens,
-        "true_activations": scored_simulation.true_activations,
-        "predicted_activations": scored_simulation.simulation.expected_activations,
-        "ev_correlation_score": ev_correlation_score,
-        "rsquared_score": scored_simulation.rsquared_score,
-        "absolute_dev_explained_score": scored_simulation.absolute_dev_explained_score,
-    }
+    return ScoredSequenceSimulation(
+        distance=scored_simulation.distance,
+        simulation=scored_simulation.simulation,
+        true_activations=scored_simulation.true_activations,
+        ev_correlation_score=ev_correlation_score,
+        rsquared_score=scored_simulation.rsquared_score,
+    )
 
 
 def aggregate_scored_sequence_simulations(
@@ -135,14 +135,14 @@ def aggregate_scored_sequence_simulations(
     rsquared_score = 0
     absolute_dev_explained_score = 0
 
-    scored_sequence_simulations = [default(s) for s in scored_sequence_simulations]  # type: ignore
+    scored_sequence_simulations = [default(s) for s in scored_sequence_simulations]
 
     ev_correlation_score = fix_nan(ev_correlation_score)
 
     return ScoredSimulation(
         distance=distance,
         scored_sequence_simulations=scored_sequence_simulations,
-        ev_correlation_score=ev_correlation_score,  # type: ignore
+        ev_correlation_score=ev_correlation_score,
         rsquared_score=float(rsquared_score),
         absolute_dev_explained_score=float(absolute_dev_explained_score),
     )
@@ -152,50 +152,54 @@ async def simulate_and_score(
     simulator: NeuronSimulator,
     activation_records: Sequence[ActivationRecord],
     non_activation_records: Sequence[ActivationRecord],
-) -> ScoredSimulation:
+) -> list[ScoredSimulation]:
     """
     Score an explanation of a neuron by how well it predicts activations
     on the given text sequences.
     """
     scored_sequence_simulations = await asyncio.gather(
         *[
-            asyncio.gather(
-                *[
-                    _simulate_and_score_sequence(
-                        simulator, activation_record, quantile + 1
-                    )
-                    for activation_record in activation_quantile  # type: ignore
-                ]
+            _simulate_and_score_sequence(
+                simulator,
+                activation_record,
+                activation_record.quantile,
             )
-            for quantile, activation_quantile in enumerate(activation_records)
+            for activation_record in activation_records
         ]
     )
+
     if len(non_activation_records) > 0:
         non_activating_scored_seq_simulations = await asyncio.gather(
             *[
-                _simulate_and_score_sequence(simulator, non_activation_record[0], -1)  # type: ignore
+                _simulate_and_score_sequence(
+                    simulator, non_activation_record, non_activation_record.quantile
+                )
                 for non_activation_record in non_activation_records
             ]
         )
     else:
         non_activating_scored_seq_simulations = []
 
-    # with open('test.txt', 'w') as f:
-    #     f.write(str(scored_sequence_simulations))
-    # return scored_sequence_simulations
+    values: list[ScoredSimulation] = []
+    simulations_per_distance = {}
+    without_errors: list[ScoredSequenceSimulation] = []
+    for sequence in scored_sequence_simulations:
 
-    values = []
-    all_activated = []
-    for distance, sequence in enumerate(scored_sequence_simulations):
-        without_errors = []
-        for s in sequence:
-            if len(s.simulation.expected_activations) > 0:
-                without_errors.append(s)
+        if len(sequence.simulation.expected_activations) > 0:
+            if sequence.distance + 1 not in simulations_per_distance:
+                simulations_per_distance[sequence.distance + 1] = []
+            simulations_per_distance[sequence.distance + 1].append(sequence)
+            without_errors.append(sequence)
+    for quantile in simulations_per_distance.keys():
         values.append(
-            aggregate_scored_sequence_simulations(without_errors, distance + 1)
+            aggregate_scored_sequence_simulations(
+                simulations_per_distance[quantile], quantile
+            )
         )
-        all_activated.extend(without_errors)
+
     if len(non_activation_records) > 0:
-        all_data = all_activated + non_activating_scored_seq_simulations
-        values.append(aggregate_scored_sequence_simulations(all_data, 0))
-    return values  # type: ignore
+        for sequence in non_activating_scored_seq_simulations:
+            if len(sequence.simulation.expected_activations) > 0:
+                without_errors.append(sequence)
+        values.append(aggregate_scored_sequence_simulations(without_errors, 0))
+    return values

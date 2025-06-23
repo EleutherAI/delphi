@@ -6,8 +6,9 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from collections.abc import Sequence
 from enum import Enum
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 from pydantic import BaseModel
@@ -99,6 +100,7 @@ def compute_expected_value(
     )
 
 
+# TODO: these types are not correct
 def parse_top_logprobs(top_logprobs: dict[str, float]) -> OrderedDict[int, float]:
     """
     Given a map from tokens to logprobs, return a map from distribution values
@@ -149,8 +151,6 @@ def parse_simulation_response(
         is being simulated
     """
     logprobs = response.prompt_logprobs
-    # print(logprobs)
-    # print(logprobs[1])
     # (gpaulo) this should be done in a smarter way, it really only works with the llama template
     assistant_token = tokenized_prompt[-3]
     # find penultimate assistant token
@@ -263,7 +263,7 @@ class ExplanationNeuronSimulator(NeuronSimulator):
             logger.debug("result in score_explanation_by_activations is %s", result)
             return result
         except Exception as e:
-            logger.error(f"Simulation response parsing failed: {e}")
+            logger.error(f"Simulation response parsing failed: {repr(e)}")
             return SequenceSimulation(
                 tokens=list(tokens),
                 expected_activations=[0] * len(tokens),
@@ -641,7 +641,7 @@ Fill out the activation values with integer values from 0 to 10. Don't use negat
             }
             """
             prompt_builder.add_message(
-                "user",  # type: ignore
+                "user",
                 _format_record_for_logprob_free_simulation_json(
                     explanation=example.explanation,
                     activation_record=example.activation_records[0],
@@ -681,10 +681,12 @@ Fill out the activation values with integer values from 0 to 10. Don't use negat
         }
         """
         prompt_builder.add_message(
-            "user",  # type: ignore
+            "user",
             _format_record_for_logprob_free_simulation_json(
                 explanation=explanation,
-                activation_record=ActivationRecord(tokens=tokens, activations=[]),  # type: ignore
+                activation_record=ActivationRecord(
+                    tokens=list(tokens), activations=[], quantile=-1
+                ),
                 include_activations=False,
             ),
         )

@@ -1,4 +1,9 @@
-from ...latents import Example
+from typing import Sequence
+
+import torch
+
+from delphi.latents.latents import ActivatingExample, NonActivatingExample
+
 from ..scorer import Scorer, ScorerResult
 from .oai_autointerp import (
     ActivationRecord,
@@ -37,9 +42,9 @@ class OpenAISimulator(Scorer):
             record.explanation,
         )
 
-        valid_activation_records = self.to_activation_records(record.test)  # type: ignore
+        valid_activation_records = self.to_activation_records(record.test)
         if len(record.not_active) > 0:
-            non_activation_records = self.to_activation_records([record.not_active])  # type: ignore
+            non_activation_records = self.to_activation_records(record.not_active)
         else:
             non_activation_records = []
 
@@ -52,14 +57,32 @@ class OpenAISimulator(Scorer):
             score=result,
         )
 
-    def to_activation_records(self, examples: list[Example]) -> list[ActivationRecord]:
-        return [  # type: ignore
-            [
+    def to_activation_records(
+        self, examples: Sequence[ActivatingExample | NonActivatingExample]
+    ) -> list[ActivationRecord]:
+        # Filter Nones
+        result = []
+        for example in examples:
+            if example is None:
+                continue
+
+            if isinstance(example, NonActivatingExample):
+                # Use zeros for non-activating examples
+                activations: list[int] = torch.zeros_like(example.activations).tolist()
+            else:
+                assert example.normalized_activations is not None
+                activations: list[int] = example.normalized_activations.tolist()
+
+            result.append(
                 ActivationRecord(
                     self.tokenizer.batch_decode(example.tokens),
-                    example.normalized_activations.half(),
+                    activations,
+                    quantile=(
+                        example.quantile
+                        if isinstance(example, ActivatingExample)
+                        else -1
+                    ),
                 )
-                for example in quantiles  # type: ignore
-            ]
-            for quantiles in examples
-        ]
+            )
+
+        return result

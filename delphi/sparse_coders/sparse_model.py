@@ -1,14 +1,17 @@
-from typing import Callable
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
-from sparsify import SparseCoder
 from transformers import PreTrainedModel
 
 from delphi.config import RunConfig
 
-from .custom.gemmascope import load_gemma_autoencoders
-from .load_sparsify import load_sparsify_hooks, load_sparsify_sparse_coders
+from .custom.gemmascope import load_gemma_autoencoders, load_gemma_hooks
+from .load_sparsify import (
+    PotentiallyWrappedSparseCoder,
+    load_sparsify_hooks,
+    load_sparsify_sparse_coders,
+)
 
 
 def load_hooks_sparse_coders(
@@ -55,7 +58,7 @@ def load_hooks_sparse_coders(
             sae_sizes.append(sae_size)
             l0s.append(l0)
 
-        hookpoint_to_sparse_encode = load_gemma_autoencoders(
+        hookpoint_to_sparse_encode = load_gemma_hooks(
             model_path=model_path,
             ae_layers=layers,
             average_l0s=l0s,
@@ -75,7 +78,7 @@ def load_sparse_coders(
     run_cfg: RunConfig,
     device: str | torch.device,
     compile: bool = False,
-) -> dict[str, nn.Module] | dict[str, SparseCoder]:
+) -> dict[str, nn.Module] | dict[str, PotentiallyWrappedSparseCoder]:
     """
     Load sparse coders for specified hookpoints.
 

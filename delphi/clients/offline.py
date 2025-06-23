@@ -12,7 +12,8 @@ from vllm.distributed.parallel_state import (
     destroy_model_parallel,
 )
 
-from ..logger import logger
+from delphi import logger
+
 from .client import Client, Response
 
 
@@ -45,6 +46,7 @@ class Offline(Client):
         prefix_caching: bool = True,
         batch_size: int = 100,
         max_model_len: int = 4096,
+        number_tokens_to_generate: int = 500,
         num_gpus: int = 2,
         enforce_eager: bool = False,
         statistics: bool = False,
@@ -65,7 +67,7 @@ class Offline(Client):
             max_model_len=max_model_len,
             enforce_eager=enforce_eager,
         )
-        self.sampling_params = SamplingParams(max_tokens=500)
+        self.sampling_params = SamplingParams(max_tokens=number_tokens_to_generate)
         self.tokenizer = AutoTokenizer.from_pretrained(model)
         self.batch_size = batch_size
         self.statistics = statistics
@@ -74,7 +76,11 @@ class Offline(Client):
             self.statistics_path = Path("statistics")
             self.statistics_path.mkdir(parents=True, exist_ok=True)
 
-    async def process_func(self, batches: Union[str, list[dict[str, str]]], kwargs):
+    async def process_func(
+        self,
+        batches: Union[str, list[Union[dict[str, str], list[dict[str, str]]]]],
+        kwargs,
+    ):
         """
         Process a single request.
         """
@@ -142,7 +148,9 @@ class Offline(Client):
             )
         return new_response
 
-    async def generate(self, prompt: Union[str, list[dict[str, str]]], **kwargs) -> str:  # type: ignore
+    async def generate(
+        self, prompt: Union[str, list[dict[str, str]]], **kwargs
+    ) -> Response:  # type: ignore
         """
         Enqueue a request and wait for the result.
         """
@@ -222,7 +230,7 @@ class Offline(Client):
                     if not future.done():
                         future.set_result(result)
             except Exception as e:
-                logger.error(f"Batch processing failed: {e}")
+                logger.error(f"Batch processing failed: {repr(e)}")
                 for future in batch_futures:
                     if not future.done():
                         future.set_exception(e)

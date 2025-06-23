@@ -35,14 +35,14 @@ random_text = [
 
 @pytest.fixture(scope="module")
 def tokenizer() -> PreTrainedTokenizer | PreTrainedTokenizerFast:
-    tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-160m")
+    tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")
     tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
 
 
 @pytest.fixture(scope="module")
 def model() -> PreTrainedModel:
-    model = AutoModel.from_pretrained("EleutherAI/pythia-160m")
+    model = AutoModel.from_pretrained("EleutherAI/pythia-70m")
     return model
 
 
@@ -52,8 +52,6 @@ def mock_dataset(tokenizer: PreTrainedTokenizer) -> torch.Tensor:
         random_text, return_tensors="pt", truncation=True, max_length=16, padding=True
     )["input_ids"]
     tokens = cast(Tensor, tokens)
-    print(tokens)
-    print(tokens.shape)
     return tokens
 
 
@@ -75,14 +73,19 @@ def cache_setup(tmp_path_factory, mock_dataset: torch.Tensor, model: PreTrainedM
         sampler_cfg=SamplerConfig(),
         cache_cfg=cache_cfg,
         model="EleutherAI/pythia-160m",
-        sparse_model="EleutherAI/sae-pythia-160m-32k",
+        sparse_model="EleutherAI/sae-pythia-70m-32k",
         hookpoints=["layers.1"],
     )
     hookpoint_to_sparse_encode, _ = load_hooks_sparse_coders(model, run_cfg_gemma)
-    print(hookpoint_to_sparse_encode)
     # Define cache config and initialize cache
+    log_path = Path.cwd() / "results" / "test" / "log"
+    log_path.mkdir(parents=True, exist_ok=True)
+
     cache = LatentCache(
-        model, hookpoint_to_sparse_encode, batch_size=cache_cfg.batch_size
+        model,
+        hookpoint_to_sparse_encode,
+        batch_size=cache_cfg.batch_size,
+        log_path=log_path,
     )
 
     # Generate mock tokens and run the cache
@@ -97,7 +100,7 @@ def cache_setup(tmp_path_factory, mock_dataset: torch.Tensor, model: PreTrainedM
 
     cache.save_config(temp_dir, cache_cfg, "EleutherAI/pythia-70m")
     hookpoint_firing_counts = torch.load(
-        Path.cwd() / "results" / "log" / "hookpoint_firing_counts.pt", weights_only=True
+        log_path / "hookpoint_firing_counts.pt", weights_only=True
     )
     return {
         "cache": cache,

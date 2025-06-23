@@ -8,9 +8,10 @@ from typing import NamedTuple
 
 import aiofiles
 
-from ..clients.client import Client
+from delphi import logger
+
+from ..clients.client import Client, Response
 from ..latents.latents import ActivatingExample, LatentRecord
-from ..logger import logger
 
 
 class ExplainerResult(NamedTuple):
@@ -44,6 +45,7 @@ class Explainer(ABC):
         response = await self.client.generate(
             messages, temperature=self.temperature, **self.generation_kwargs
         )
+        assert isinstance(response, Response)
 
         try:
             explanation = self.parse_explanation(response.text)
@@ -54,7 +56,7 @@ class Explainer(ABC):
 
             return ExplainerResult(record=record, explanation=explanation)
         except Exception as e:
-            logger.error(f"Explanation parsing failed: {e}")
+            logger.error(f"Explanation parsing failed: {repr(e)}")
             return ExplainerResult(
                 record=record, explanation="Explanation could not be parsed."
             )
@@ -67,7 +69,7 @@ class Explainer(ABC):
             else:
                 return "Explanation could not be parsed."
         except Exception as e:
-            logger.error(f"Explanation parsing regex failed: {e}")
+            logger.error(f"Explanation parsing regex failed: {repr(e)}")
             raise
 
     def _highlight(self, str_toks: list[str], activations: list[float]) -> str:
@@ -126,7 +128,7 @@ async def explanation_loader(
             explanation = json.loads(await f.read())
         return ExplainerResult(record=record, explanation=explanation)
     except FileNotFoundError:
-        print(f"No explanation found for {record.latent}")
+        logger.info(f"No explanation found for {record.latent}")
         return ExplainerResult(record=record, explanation="No explanation found")
 
 

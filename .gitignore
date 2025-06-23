@@ -8,7 +8,6 @@ latents/*
 results/*
 extras/*
 temp/*
-tests/*
 saved*
 .nfs*
 

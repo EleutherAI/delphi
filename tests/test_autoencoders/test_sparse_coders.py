@@ -1,6 +1,9 @@
 import pytest
 import torch
 import torch.nn as nn
+from transformers import PreTrainedModel
+
+from delphi.config import RunConfig
 
 # Import the function to be tested
 from delphi.sparse_coders import load_hooks_sparse_coders
@@ -14,6 +17,10 @@ class DummyRunConfig:
         # Additional required fields can be added here if needed.
         self.model = "dummy_model"
         self.hf_token = ""
+
+    @property
+    def __class__(self) -> type:  # type: ignore
+        return RunConfig
 
 
 class DummyLayer(nn.Module):
@@ -37,6 +44,10 @@ class DummyModel(nn.Module):
 
     def forward(self, x):
         return x
+
+    @property
+    def __class__(self) -> type:  # type: ignore
+        return PreTrainedModel
 
 
 @pytest.fixture
@@ -87,7 +98,8 @@ def test_retrieve_autoencoders_from_sparsify(dummy_model, run_cfg_sparsify):
             _ = autoencoder(dummy_input)
         except Exception as e:
             pytest.fail(
-                f"Autoencoder '{key}' from the Sparsify branch failed when called: {e}"
+                f"Autoencoder '{key}' from the Sparsify branch failed when called:"
+                f"\n{repr(e)}"
             )
         # Optionally, further tests can check output shapes or values.
 
@@ -112,5 +124,6 @@ def test_retrieve_autoencoders_from_gemma(dummy_model, run_cfg_gemma):
             _ = autoencoder(dummy_input)
         except Exception as e:
             pytest.fail(
-                f"Autoencoder '{key}' from the Gemma branch failed when called: {e}"
+                f"Autoencoder '{key}' from the Gemma branch failed when called:"
+                f"\n{repr(e)}"
             )
