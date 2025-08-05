@@ -4,6 +4,9 @@ import numpy as np
 import torch
 from torch import Tensor
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+import datasets
+from datasets.table import table_iter
+
 
 
 def load_tokenized_data(
@@ -32,6 +35,13 @@ def load_tokenized_data(
     )
 
     tokens = tokens_ds["input_ids"]
+
+    if isinstance(tokens, datasets.Column):
+        chunk_size = 2**18
+        tokens = torch.cat([
+            torch.from_numpy(np.stack(table_chunk["input_ids"].to_numpy(), axis=0))
+            for table_chunk in table_iter(tokens.source._data, chunk_size)
+        ])
 
     return tokens
 
