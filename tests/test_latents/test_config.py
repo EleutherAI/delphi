@@ -1,7 +1,9 @@
-from delphi.utils import load_tokenized_data
-from transformers import AutoTokenizer
-import torch
 from pathlib import Path
+
+import torch
+from transformers import AutoTokenizer
+
+from delphi.utils import load_tokenized_data
 
 
 def test_dataset_is_array():
@@ -57,7 +59,9 @@ def test_hookpoint_firing_counts_persistence(cache_setup):
     cache = cache_setup["empty_cache"]
     cache.save_firing_counts()
 
-    firing_counts_path = Path.cwd() / "results" / "test" / "log" / "hookpoint_firing_counts.pt"
+    firing_counts_path = (
+        Path.cwd() / "results" / "test" / "log" / "hookpoint_firing_counts.pt"
+    )
     assert firing_counts_path.exists(), "Firing counts file should exist after saving"
 
     loaded_counts = torch.load(firing_counts_path, weights_only=True)
