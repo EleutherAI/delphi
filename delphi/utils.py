@@ -30,8 +30,9 @@ def load_tokenized_data(
         dataset_name: The name of the dataset.
         column_name: The name of the column to tokenize.
         seed: The seed to use for shuffling the dataset.
-        convert_to_tensor_chunk_size: The chunk size to use when converting the dataset from
-        Huggingface's Table format to a tensor. Values around 2**17-2**18 seem to be the fastest.
+        convert_to_tensor_chunk_size: The chunk size to use when converting the dataset
+        from Huggingface's Table format to a tensor. Values around 2**17-2**18 seem to be
+        the fastest.
     """
     from datasets import load_dataset
     from sparsify.data import chunk_and_tokenize
