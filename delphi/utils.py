@@ -21,7 +21,7 @@ def load_tokenized_data(
     """
     Load a huggingface dataset, tokenize it, and shuffle.
     Using this function ensures we are using the same tokens everywhere.
-    
+
     Args:
         ctx_len: The context length of the tokens.
         tokenizer: The tokenizer to use.
@@ -51,7 +51,9 @@ def load_tokenized_data(
         tokens = torch.cat(
             [
                 torch.from_numpy(np.stack(table_chunk["input_ids"].to_numpy(), axis=0))
-                for table_chunk in table_iter(tokens.source._data, convert_to_tensor_chunk_size)
+                for table_chunk in table_iter(
+                    tokens.source._data, convert_to_tensor_chunk_size
+                )
             ]
         )
 
