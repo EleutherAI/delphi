@@ -1,6 +1,6 @@
+import shutil
 from pathlib import Path
 from typing import cast
-import shutil
 
 import pytest
 import torch
@@ -16,7 +16,6 @@ from transformers import (
 from delphi.config import CacheConfig, ConstructorConfig, RunConfig, SamplerConfig
 from delphi.latents import LatentCache
 from delphi.sparse_coders import load_hooks_sparse_coders
-
 
 random_text = [
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
@@ -83,13 +82,16 @@ def cache_setup(tmp_path_factory, mock_dataset: torch.Tensor, model: PreTrainedM
     log_path = Path.cwd() / "results" / "test" / "log"
     shutil.rmtree(log_path, ignore_errors=True)
     log_path.mkdir(parents=True, exist_ok=True)
-    
-    cache, empty_cache = (LatentCache(
-        model,
-        hookpoint_to_sparse_encode,
-        batch_size=cache_cfg.batch_size,
-        log_path=log_path,
-    ) for _ in range(2))
+
+    cache, empty_cache = (
+        LatentCache(
+            model,
+            hookpoint_to_sparse_encode,
+            batch_size=cache_cfg.batch_size,
+            log_path=log_path,
+        )
+        for _ in range(2)
+    )
 
     # Generate mock tokens and run the cache
     tokens = mock_dataset
