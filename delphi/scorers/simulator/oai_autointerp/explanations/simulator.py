@@ -641,7 +641,7 @@ Fill out the activation values with integer values from 0 to 10. Don't use negat
             }
             """
             prompt_builder.add_message(
-                "user",
+                Role.USER,
                 _format_record_for_logprob_free_simulation_json(
                     explanation=example.explanation,
                     activation_record=example.activation_records[0],
@@ -661,13 +661,13 @@ Fill out the activation values with integer values from 0 to 10. Don't use negat
             }
             """
             prompt_builder.add_message(
-                "assistant",  # type: ignore
-                _format_record_for_logprob_free_simulation_json(
-                    explanation=example.explanation,
-                    activation_record=example.activation_records[0],
-                    include_activations=True,
-                ),
-            )
+            Role.ASSISTANT,
+            _format_record_for_logprob_free_simulation_json(
+                explanation=example.explanation,
+                activation_record=example.activation_records[0],
+                include_activations=True,
+            ),
+        )
         """
         {
             "to_find": "hello",
