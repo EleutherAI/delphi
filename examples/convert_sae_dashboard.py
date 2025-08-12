@@ -1,14 +1,10 @@
 import gc
-from typing import Tuple, List, Dict, Any
 from argparse import Namespace
 from dataclasses import replace
-from pathlib import Path
+from typing import Any, Dict, List, Tuple
+
 import numpy as np
 import torch
-from tqdm.auto import tqdm
-from simple_parsing import ArgumentParser
-from transformers import AutoModelForCausalLM
-
 from sae_dashboard.components import (
     ActsHistogramData,
     DecoderWeightsDistribution,
@@ -22,7 +18,11 @@ from sae_dashboard.data_parsing_fns import get_logits_table_data
 from sae_dashboard.data_writing_fns import save_feature_centric_vis
 from sae_dashboard.feature_data import FeatureData
 from sae_dashboard.sae_vis_data import SaeVisConfig, SaeVisData
-from sae_dashboard.utils_fns import FeatureStatistics, ASYMMETRIC_RANGES_AND_PRECISIONS
+from sae_dashboard.utils_fns import ASYMMETRIC_RANGES_AND_PRECISIONS, FeatureStatistics
+from simple_parsing import ArgumentParser
+from tqdm.auto import tqdm
+from transformers import AutoModelForCausalLM
+
 from delphi.config import ConstructorConfig, SamplerConfig
 from delphi.latents import LatentDataset
 from delphi.sparse_coders.sparse_model import load_sparsify_sparse_coders
@@ -69,7 +69,9 @@ def parse_args() -> Namespace:
     parser.add_arguments(
         SamplerConfig,
         dest="sampler_cfg",
-        default=SamplerConfig(n_examples_train=25, n_quantiles=5, train_type="quantiles"),
+        default=SamplerConfig(
+            n_examples_train=25, n_quantiles=5, train_type="quantiles"
+        ),
     )
     return parser.parse_args()
 
@@ -84,12 +86,18 @@ def get_lm_head(cache_lm: AutoModelForCausalLM) -> torch.nn.Sequential:
     Returns:
         torch.nn.Sequential: The LM head module for logits computation.
     """
-    if hasattr(cache_lm, "model") and hasattr(cache_lm.model, "norm") and hasattr(cache_lm, "lm_head"):
+    if (
+        hasattr(cache_lm, "model")
+        and hasattr(cache_lm.model, "norm")
+        and hasattr(cache_lm, "lm_head")
+    ):
         # llama models
         return torch.nn.Sequential(cache_lm.model.norm, cache_lm.lm_head)
     elif hasattr(cache_lm, "gpt_neox") and hasattr(cache_lm, "embed_out"):
         # pythia models
-        return torch.nn.Sequential(cache_lm.gpt_neox.final_layer_norm, cache_lm.embed_out)
+        return torch.nn.Sequential(
+            cache_lm.gpt_neox.final_layer_norm, cache_lm.embed_out
+        )
     else:
         raise ValueError("Unknown model architecture for extracting lm_head.")
 
@@ -146,7 +154,9 @@ def process_latents(
     for _, record in enumerate(raw_loader):
         assert record.activation_data is not None
         latent_id = record.activation_data.locations[0, 2].item()
-        decoder_resid = latent_to_resid[latent_id].to(record.activation_data.activations.device)
+        decoder_resid = latent_to_resid[latent_id].to(
+            record.activation_data.activations.device
+        )
         logit_vector = lm_head(decoder_resid)
 
         activations = record.activation_data.activations
@@ -155,8 +165,12 @@ def process_latents(
         nonzero_acts = activations[nonzero_mask]
         frac_nonzero = nonzero_mask.sum() / (n_sequences * max_seq_len)
         quantile_data = torch.quantile(activations.float(), quantiles_tensor)
-        skew = torch.mean((activations - activations.mean()) ** 3) / (activations.std() ** 3)
-        kurtosis = torch.mean((activations - activations.mean()) ** 4) / (activations.std() ** 4)
+        skew = torch.mean((activations - activations.mean()) ** 3) / (
+            activations.std() ** 3
+        )
+        kurtosis = torch.mean((activations - activations.mean()) ** 4) / (
+            activations.std() ** 4
+        )
         latent_stats.update(
             FeatureStatistics(
                 max=[_max.item()],
@@ -245,8 +259,8 @@ def process_sequences(
                     seq_data=group,
                 )
             )
-        latent_data_dict[record.latent.latent_index].sequence_data = SequenceMultiGroupData(
-            seq_group_data=groups
+        latent_data_dict[record.latent.latent_index].sequence_data = (
+            SequenceMultiGroupData(seq_group_data=groups)
         )
         bar.update(1)
         bar.refresh()
@@ -320,16 +334,22 @@ def main() -> None:
 
     # Process latents
     latent_data_dict, latent_stats = process_latents(
-        raw_loader, lm_head, latent_to_resid, layout, quantiles, quantiles_tensor, ranges_and_precisions, n_sequences, max_seq_len
+        raw_loader,
+        lm_head,
+        latent_to_resid,
+        layout,
+        quantiles,
+        quantiles_tensor,
+        ranges_and_precisions,
+        n_sequences,
+        max_seq_len,
     )
     latent_list = latent_dict[module].tolist()
     cfg.features = latent_list
 
     # Process sequences
     n_quantiles = sampler_cfg.n_quantiles
-    sequence_loader = LatentDataset(
-        **kwargs | dict(sampler_cfg=sampler_cfg)
-    )
+    sequence_loader = LatentDataset(**kwargs | dict(sampler_cfg=sampler_cfg))
     process_sequences(sequence_loader, latent_data_dict, n_quantiles)
 
     # Save dashboard
