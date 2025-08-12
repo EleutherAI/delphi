@@ -107,7 +107,7 @@ def compute_quantiles() -> Tuple[List[float], torch.Tensor, List[Any]]:
     Compute quantile bins for activation statistics.
 
     Returns:
-        tuple[list[float], torch.Tensor, list[tuple]]: quantiles, 
+        tuple[list[float], torch.Tensor, list[tuple]]: quantiles,
             quantiles_tensor, ranges_and_precisions
     """
     ranges_and_precisions = ASYMMETRIC_RANGES_AND_PRECISIONS
