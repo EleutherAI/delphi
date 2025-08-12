@@ -24,14 +24,30 @@ def build_examples(
 
     return examples
 
+def build_feature_logits(top_logits: list[str], bot_logits: list[str]):
+    prompt = ""
+    if top_logits:
+        prompt +="Here are the top logits PROMOTED by this pattern:\n"
+        prompt += ", ".join(top_logits)
+    if bot_logits:
+        prompt +="Here are the top logits SUPRESSED by this pattern:\n"
+        prompt += ", ".join(bot_logits)
+
+    print(prompt)
+    return prompt
 
 def build_prompt(
     examples: str,
+    top_logits: list[str],
+    bot_logits: list[str],
     activations: bool = False,
     cot: bool = False,
+    
 ) -> list[dict]:
     messages = system(
         cot=cot,
+        top_logits= (len(top_logits) > 0),
+        bot_logits= (len(bot_logits) > 0),
     )
 
     few_shot_examples = build_examples(
@@ -40,8 +56,9 @@ def build_prompt(
     )
 
     messages.extend(few_shot_examples)
+    logits = build_feature_logits(top_logits, bot_logits)
 
-    user_start = f"\n{examples}\n"
+    user_start = f"\n{examples}\n{logits}\n"
 
     messages.append(
         {

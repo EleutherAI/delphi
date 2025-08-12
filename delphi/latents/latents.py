@@ -157,6 +157,12 @@ class LatentRecord:
     """Frequency of the latent. Number of activations in a context per total
     number of contexts."""
 
+    top_logits: list[str] = None
+    """Top logits promoted by this feature"""
+
+    bot_logits: list[str] = None
+    """Top logits supressed by this feature"""
+
     @property
     def max_activation(self) -> float:
         """

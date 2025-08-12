@@ -27,7 +27,8 @@ SYSTEM = """You are a meticulous AI researcher conducting an important investiga
 Guidelines:
 
 You will be given a list of text examples on which special words are selected and between delimiters like <<this>>. If a sequence of consecutive tokens all are important, the entire sequence of tokens will be contained between delimiters <<just like this>>. How important each token is for the behavior is listed after each example in parentheses.
-
+{top_logits}
+{bot_logits}
 - Try to produce a concise final description. Simply describe the text latents that are common in the examples, and what patterns you found.
 - If the examples are uninformative, you don't need to mention them. Don't focus on giving examples of important tokens, but try to summarize the patterns found in the examples.
 - Do not mention the marker tokens (<< >>) in your explanation.
@@ -61,7 +62,14 @@ To better find the explanation for the language patterns go through the followin
 3. Formulate an hypothesis and write down the final explanation using [EXPLANATION]:.
 
 """
-
+TOP_LOGITS = """
+Additionally, you will be given a list of the top ten tokens this pattern wants to PROMOTE. 
+If there is a clear pattern amongst these ten tokens, use it to inform your explanation.
+"""
+BOT_LOGITS = """
+You will also be given a list of the top ten tokens this pattern wants to SUPRESS. 
+If there is a clear pattern amongst these ten tokens, use it to inform your explanation.
+"""
 
 ### EXAMPLE 1 ###
 
@@ -225,16 +233,22 @@ def example(n, **kwargs):
     return prompt, response
 
 
-def system(cot=False):
+def system(cot=False,top_logits=True,bot_logits=True):
     prompt = ""
 
     if cot:
         prompt += COT
 
+    tl = ""
+    if top_logits:
+        tl += TOP_LOGITS
+    bl = ""
+    if bot_logits:
+        bl += BOT_LOGITS
     return [
         {
             "role": "system",
-            "content": SYSTEM.format(prompt=prompt),
+            "content": SYSTEM.format(prompt=prompt,top_logits=tl,bot_logits=bl),
         }
     ]
 

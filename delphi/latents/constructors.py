@@ -2,6 +2,7 @@ import hashlib
 import os
 from pathlib import Path
 from typing import Optional
+import json
 
 import faiss
 import numpy as np
@@ -235,6 +236,7 @@ def constructor(
     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
     all_data: Optional[dict[int, ActivationData]] = None,
     seed: int = 42,
+    logits_directory: os.PathLike = None
 ) -> LatentRecord | None:
     cache_ctx_len = tokens.shape[1]
     example_ctx_len = constructor_cfg.example_ctx_len
@@ -260,6 +262,32 @@ def constructor(
     # per context frequency
     record.per_context_frequency = len(unique_batch_pos) / n_windows
 
+    # add top/bottom logits if available
+    if logits_directory:
+        import re
+        def cantor(num1, num2):
+            return (num1 + num2) * (num1 + num2 + 1) // 2 + num2
+        match = re.search(r"\d+", record.latent.module_name)
+        logits_file = ""
+        if match:
+            layer = int(match.group(0))
+            logits_file = f"{logits_directory}/{str(cantor(layer,record.latent.latent_index))}.json"
+
+        else:
+            logger.warning(
+                f"Module name does not include layer number. Failed to load logits"
+            )
+            logits_file = ""
+        
+        if os.path.exists(logits_file):
+            with open(logits_file, 'r') as file:
+                data = json.load(file)
+                record.top_logits = data["top_logits"]
+                record.bot_logits = data["bottom_logits"]
+        else:
+            logger.warning(
+                f"Could not find logits file. Failed to load logits"
+            )
     # Add activation examples to the record in place
     if constructor_cfg.center_examples:
         token_windows, act_windows = pool_max_activation_windows(
