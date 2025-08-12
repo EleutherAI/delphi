@@ -107,7 +107,8 @@ def compute_quantiles() -> Tuple[List[float], torch.Tensor, List[Any]]:
     Compute quantile bins for activation statistics.
 
     Returns:
-        tuple[list[float], torch.Tensor, list[tuple]]: (quantiles, quantiles_tensor, ranges_and_precisions)
+        tuple[list[float], torch.Tensor, list[tuple]]: quantiles, 
+            quantiles_tensor, ranges_and_precisions
     """
     ranges_and_precisions = ASYMMETRIC_RANGES_AND_PRECISIONS
     quantiles = []
@@ -253,9 +254,12 @@ def process_sequences(
                         **default_attrs,
                     )
                 )
+            quantile_start = quantile_index / n_quantiles
+            quantile_end = (quantile_index + 1) / n_quantiles
+            title = f"Quantile {quantile_start:1%}-{quantile_end:1%}"
             groups.append(
                 SequenceGroupData(
-                    title=f"Quantile {quantile_index/n_quantiles:1%}-{(quantile_index+1)/n_quantiles:1%}",
+                    title=title,
                     seq_data=group,
                 )
             )
