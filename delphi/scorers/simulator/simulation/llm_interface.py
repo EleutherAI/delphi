@@ -211,10 +211,10 @@ def parse_simulation_response(
     # Handle both old (dict) and new (list) API formats
     def logprobs_lookup_dict(idx):
         return logprobs[idx]
-    
+
     def logprobs_lookup_list(idx):
         return logprobs[idx] if idx < len(logprobs) else None
-    
+
     if isinstance(logprobs, dict):
         logprobs_lookup = logprobs_lookup_dict
     elif isinstance(logprobs, list):
