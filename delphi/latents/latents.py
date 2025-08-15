@@ -157,11 +157,14 @@ class LatentRecord:
     """Frequency of the latent. Number of activations in a context per total
     number of contexts."""
 
-    top_logits: list[str] = None
+    top_logits: list[str] = field(default_factory=list)
     """Top logits promoted by this feature"""
 
-    bot_logits: list[str] = None
+    bot_logits: list[str] = field(default_factory=list)
     """Top logits supressed by this feature"""
+
+    parents: list[tuple[str, int]] = field(default_factory=list)
+    """List of parent features and their influence."""
 
     @property
     def max_activation(self) -> float:

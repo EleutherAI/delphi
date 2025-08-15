@@ -130,7 +130,8 @@ class LatentDataset:
         modules: Optional[list[str]] = None,
         latents: Optional[dict[str, torch.Tensor]] = None,
         neighbours_path: Optional[os.PathLike] = None,
-        logits_directory: Optional[os.PathLike] = None
+        logits_directory: Optional[os.PathLike] = None,
+        graph_prompt: str = "",
     ):
         """
         Initialize a LatentDataset.

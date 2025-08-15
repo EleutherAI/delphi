@@ -27,8 +27,6 @@ SYSTEM = """You are a meticulous AI researcher conducting an important investiga
 Guidelines:
 
 You will be given a list of text examples on which special words are selected and between delimiters like <<this>>. If a sequence of consecutive tokens all are important, the entire sequence of tokens will be contained between delimiters <<just like this>>. How important each token is for the behavior is listed after each example in parentheses.
-{top_logits}
-{bot_logits}
 - Try to produce a concise final description. Simply describe the text latents that are common in the examples, and what patterns you found.
 - If the examples are uninformative, you don't need to mention them. Don't focus on giving examples of important tokens, but try to summarize the patterns found in the examples.
 - Do not mention the marker tokens (<< >>) in your explanation.
@@ -62,13 +60,58 @@ To better find the explanation for the language patterns go through the followin
 3. Formulate an hypothesis and write down the final explanation using [EXPLANATION]:.
 
 """
+SYSTEM_GRAPH = """You are a meticulous linguist conducting an important investigation into patterns found in language. 
+### Task:
+Your task is to analyze text and provide an explanation that thoroughly encapsulates possible patterns found in it.
+
+### Inputs:
+You will be given a list of text examples on which special words are selected and between delimiters like <<this>>. If a sequence of consecutive tokens all are important, the entire sequence of tokens will be contained between delimiters <<just like this>>. How important each token is for the behavior is listed after each example in parentheses.
+You will also be given additional information that can help you understand the patterns better, such as:
+{graph_prompt}
+{parent_explanations}
+{top_logits}
+{bot_logits}
+
+### Required Output:
+- Analyze text and provide an explanation that encapsulates possible patterns found in it.
+- The explanation must be **10 words or less**
+- Counterexamples where no special words are present may also be provided to help you understand the patterns' edge cases.
+- Do not mention the marker tokens (<< >>) in your explanation.
+- The last line of your response must be the formatted explanation, using [EXPLANATION]:
+
+### Guidelines
+{cot}
+""" 
+
+GRAPH_COT = """
+To better find the explanation for the language patterns, please think step by step using these instructions:
+1a. Find the special words that are selected in the examples and list a couple of them.
+1b. Sometimes, the pattern appears before or after the special word. For example an explanation could be "preceeds a comma"
+2. Come up with an initial hypothesis about the patterns in the examples.
+3. Look at the prompt and parent explanations to see if there is a recurring theme or a more specific explanation that fits the examples.
+4. Check if the top and bottom logits provide any additional clues about the patterns.
+5. Turn the initial general hypothesis into a more specific one if the additional information suggests it.
+6. Write down the final explanation using [EXPLANATION]:
+"""
+
 TOP_LOGITS = """
-Additionally, you will be given a list of the top ten tokens this pattern wants to PROMOTE. 
-If there is a clear pattern amongst these ten tokens, use it to inform your explanation.
+- A list of the top ten tokens this pattern wants to PROMOTE. 
+    - If there is a clear pattern amongst these ten tokens, use it to inform your explanation.
 """
 BOT_LOGITS = """
-You will also be given a list of the top ten tokens this pattern wants to SUPRESS. 
-If there is a clear pattern amongst these ten tokens, use it to inform your explanation.
+- A list of the top ten tokens this pattern wants to SUPRESS. 
+    - If there is a clear pattern amongst these ten tokens, use it to inform your explanation.
+"""
+GRAPH_PROMPT = """
+- The prompt which caused this feature to activate
+    - If the examples show this feature activating on many types of instances of a general concept, and the prompt indicates one of these instances to be relevant, simplify the explanation to something relevant to the prompt. 
+    - For example, if the current examples include highlighted words like  "football, soccer, tennis, basketball" and the prompt has "michael jordan", then we can be more specific and say "basketball and other sports terms"
+"""
+
+PARENT_NODE_PROMPT = """
+- A list of explanations of features related to this feature. 
+    - This relationship is quantified with a strength value and be should be considered accordingly.
+    - For example, if the current examples include highlighted words like "dog, building, tree, playground" and there is a connection to a feature called "pets" with strength 0.8, then this feature is probably detecting dogs.
 """
 
 ### EXAMPLE 1 ###
@@ -233,22 +276,16 @@ def example(n, **kwargs):
     return prompt, response
 
 
-def system(cot=False,top_logits=True,bot_logits=True):
+def system(cot=False):
     prompt = ""
 
     if cot:
         prompt += COT
 
-    tl = ""
-    if top_logits:
-        tl += TOP_LOGITS
-    bl = ""
-    if bot_logits:
-        bl += BOT_LOGITS
     return [
         {
             "role": "system",
-            "content": SYSTEM.format(prompt=prompt,top_logits=tl,bot_logits=bl),
+            "content": SYSTEM.format(prompt=prompt),
         }
     ]
 
