@@ -22,7 +22,7 @@ dependencies = [
     "blobfile",
     "bitsandbytes",
     "flask",
-    "vllm<0.8.0",
+    "vllm",
     "aiofiles",
     "sentence_transformers",
     "anyio>=4.8.0",

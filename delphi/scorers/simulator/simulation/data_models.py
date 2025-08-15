@@ -1,15 +1,78 @@
-"""Utilities for formatting activation records into prompts."""
+"""Data models and utilities for simulator operations.
+
+This module contains:
+- ActivationRecord: Core data structure for neuron activation data
+- Utility functions for processing ActivationRecord instances
+- Configuration constants used throughout the simulator
+"""
 
 import math
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Optional
 
-from .activations import ActivationRecord
+from simple_parsing import Serializable
+
+# === CONFIGURATION CONSTANTS ===
+
+# Activation value constraints
+MAX_NORMALIZED_ACTIVATION = 10
+MIN_NORMALIZED_ACTIVATION = 0
+
+# LLM prompt parameters
+PROMPT_LOGPROBS_COUNT = 15
+"""Number of top log-probabilities to request from the LLM for logprob-based
+simulation."""
+
+JSON_MAX_TOKENS = 1000
+"""Maximum number of tokens to generate when requesting JSON responses from the LLM."""
+
+# Token processing
+END_OF_TEXT_TOKEN = "<|endoftext|>"
+"""The end-of-text token that may appear in sequences."""
+
+END_OF_TEXT_TOKEN_REPLACEMENT = "<|not_endoftext|>"
+"""Replacement string for end-of-text tokens to avoid LLM confusion."""
+
+# Prompt formatting
+EXPLANATION_PREFIX = "the main thing this neuron does is find"
+"""Standard prefix used when presenting neuron explanations in prompts."""
+
+# Validation sets for parsing
+VALID_ACTIVATION_TOKENS = set(
+    str(i) for i in range(MIN_NORMALIZED_ACTIVATION, MAX_NORMALIZED_ACTIVATION + 1)
+)
+"""Set of valid activation value tokens for parsing LLM responses."""
+
+# === DATA STRUCTURES ===
+
+
+@dataclass
+class ActivationRecord(Serializable):
+    """Collated lists of tokens and their activations for a single neuron."""
+
+    tokens: list[str]
+    """Tokens in the text sequence, represented as strings."""
+
+    activations: list[float | int]
+    """Raw activation values for the neuron on each token in the text sequence."""
+
+    quantile: int
+    """
+    Quantile index for this record. Used for grouping records in simulation scoring.
+    """
+
+
+# === UTILITY FUNCTIONS ===
+
+# ReLU is used throughout to assume any values less than 0 indicate the neuron
+# is in the resting state - a simplifying assumption that works with relu/gelu.
 
 UNKNOWN_ACTIVATION_STRING = "unknown"
 
 
 def relu(x: float) -> float:
+    """Apply ReLU activation function (max(0, x))."""
     return max(0.0, x)
 
 
@@ -17,8 +80,6 @@ def calculate_max_activation(activation_records: Sequence[ActivationRecord]) -> 
     """Return the maximum activation value of the neuron across all the activation
     records."""
     flattened = [
-        # Relu is used to assume any values less than 0 are indicating the neuron is in
-        # the resting state. This is a simplifying assumption that works with relu/gelu.
         max(relu(x) for x in activation_record.activations)
         for activation_record in activation_records
     ]
@@ -28,13 +89,16 @@ def calculate_max_activation(activation_records: Sequence[ActivationRecord]) -> 
 def normalize_activations(
     activation_record: list[float], max_activation: float
 ) -> list[int]:
-    """Convert raw neuron activations to integers on the range [0, 10]."""
+    """Convert raw neuron activations to integers on the range
+    [0, MAX_NORMALIZED_ACTIVATION]."""
     if max_activation <= 0:
         return [0 for x in activation_record]
-    # Relu is used to assume any values less than 0 are indicating the neuron is in the
-    # resting state. This is a simplifying assumption that works with relu/gelu.
     return [
-        min(10, math.floor(10 * relu(x) / max_activation)) for x in activation_record
+        min(
+            MAX_NORMALIZED_ACTIVATION,
+            math.floor(MAX_NORMALIZED_ACTIVATION * relu(x) / max_activation),
+        )
+        for x in activation_record
     ]
 
 
@@ -125,23 +189,3 @@ def format_sequences_for_simulation(
         )
         + "\n<end>\n"
     )
-
-
-def non_zero_activation_proportion(
-    activation_records: Sequence[ActivationRecord], max_activation: float
-) -> float:
-    """Return the proportion of activation values that aren't zero."""
-    total_activations_count = sum(
-        [len(activation_record.activations) for activation_record in activation_records]
-    )
-    normalized_activations = [
-        normalize_activations(activation_record.activations, max_activation)
-        for activation_record in activation_records
-    ]
-    non_zero_activations_count = sum(
-        [
-            len([x for x in activations if x != 0])
-            for activations in normalized_activations
-        ]
-    )
-    return non_zero_activations_count / total_activations_count

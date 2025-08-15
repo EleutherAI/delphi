@@ -242,7 +242,14 @@ async def process_cache(
         scorer_path.mkdir(parents=True, exist_ok=True)
 
         if scorer_name == "simulation":
-            scorer = OpenAISimulator(llm_client, tokenizer=tokenizer, all_at_once=False)
+            if isinstance(llm_client, Offline):
+                scorer = OpenAISimulator(
+                    llm_client, tokenizer=tokenizer, all_at_once=True
+                )
+            else:
+                scorer = OpenAISimulator(
+                    llm_client, tokenizer=tokenizer, all_at_once=False
+                )
         elif scorer_name == "fuzz":
             scorer = FuzzingScorer(
                 llm_client,
