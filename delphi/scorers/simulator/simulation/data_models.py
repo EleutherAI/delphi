@@ -21,7 +21,8 @@ MIN_NORMALIZED_ACTIVATION = 0
 
 # LLM prompt parameters
 PROMPT_LOGPROBS_COUNT = 15
-"""Number of top log-probabilities to request from the LLM for logprob-based simulation."""
+"""Number of top log-probabilities to request from the LLM for logprob-based 
+simulation."""
 
 JSON_MAX_TOKENS = 1000
 """Maximum number of tokens to generate when requesting JSON responses from the LLM."""
@@ -88,7 +89,8 @@ def calculate_max_activation(activation_records: Sequence[ActivationRecord]) -> 
 def normalize_activations(
     activation_record: list[float], max_activation: float
 ) -> list[int]:
-    """Convert raw neuron activations to integers on the range [0, MAX_NORMALIZED_ACTIVATION]."""
+    """Convert raw neuron activations to integers on the range 
+    [0, MAX_NORMALIZED_ACTIVATION]."""
     if max_activation <= 0:
         return [0 for x in activation_record]
     return [
