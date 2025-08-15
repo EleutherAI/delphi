@@ -19,8 +19,18 @@ import json
 import logging
 from typing import List, Dict, Any, Union, Optional
 
-from .llm_interface import Role, PromptBuilder, HarmonyMessage, PromptFormat, parse_simulation_response
-from .data_models import format_activation_records, calculate_max_activation, format_sequences_for_simulation
+from .llm_interface import (
+    Role,
+    PromptBuilder,
+    HarmonyMessage,
+    PromptFormat,
+    parse_simulation_response,
+)
+from .data_models import (
+    format_activation_records,
+    calculate_max_activation,
+    format_sequences_for_simulation,
+)
 from .few_shot_examples import FewShotExampleSet
 from .types import SequenceSimulation, ActivationScale
 
@@ -51,10 +61,10 @@ class NeuronSimulator:
 
     The returned predictions have the same length and order as the input tokens.
     """
-    
+
     def __init__(self, client: Any, explanation: str, use_logprobs: bool = True):
         """Initialize the simulator.
-        
+
         Args:
             client: LLM client for inference
             explanation: Text explanation of neuron behavior
@@ -63,15 +73,17 @@ class NeuronSimulator:
         self.client = client
         self.explanation = explanation
         self.use_logprobs = use_logprobs
-        self.few_shot_example_set = FewShotExampleSet.ORIGINAL if use_logprobs else FewShotExampleSet.NEWER
+        self.few_shot_example_set = (
+            FewShotExampleSet.ORIGINAL if use_logprobs else FewShotExampleSet.NEWER
+        )
         self.prompt_format = PromptFormat.HARMONY_V4
-    
+
     async def simulate(self, tokens: List[str]):
         """Simulate neuron activations for the given tokens.
-        
+
         Args:
             tokens: List of token strings to simulate
-            
+
         Returns:
             SequenceSimulation object with predicted activations
         """
@@ -81,16 +93,18 @@ class NeuronSimulator:
             else:
                 return await self._simulate_with_json(tokens)
         except Exception as e:
-            logger.warning(f"Simulation failed: {e}, returning zeros for tokens: {tokens}")
+            logger.warning(
+                f"Simulation failed: {e}, returning zeros for tokens: {tokens}"
+            )
             return SequenceSimulation(
                 tokens=list(tokens),
                 expected_activations=[0.0] * len(tokens),
                 activation_scale=ActivationScale.SIMULATED_NORMALIZED_ACTIVATIONS,
                 distribution_values=[],
                 distribution_probabilities=[],
-                uncalibrated_simulation=None
+                uncalibrated_simulation=None,
             )
-    
+
     async def _simulate_with_logprobs(self, tokens: List[str]):
         """Simulate using log-probabilities from a few-shot prompt.
 
@@ -98,7 +112,7 @@ class NeuronSimulator:
         sequence with unknown activations, requests prompt log-probabilities for
         discretized activation tokens, and converts them into expected values
         per token.
-        
+
         Returns:
             SequenceSimulation object with predicted activations
         """
@@ -107,15 +121,19 @@ class NeuronSimulator:
             "max_tokens": 1,
             "prompt_logprobs": PROMPT_LOGPROBS_COUNT,
         }
-        
+
         response = await self.client.generate(prompt, **sampling_params)
-        tokenized_prompt = self.client.tokenizer.apply_chat_template(prompt, add_generation_prompt=True)
+        tokenized_prompt = self.client.tokenizer.apply_chat_template(
+            prompt, add_generation_prompt=True
+        )
         # Use [1] to skip BOS token that tokenizer.encode() may prepend
         tab_token = self.client.tokenizer.encode("\t")[1]
-        
-        result = parse_simulation_response(response, tokenized_prompt, tab_token, tokens)
+
+        result = parse_simulation_response(
+            response, tokenized_prompt, tab_token, tokens
+        )
         return result
-    
+
     async def _simulate_with_json(self, tokens: List[str]):
         """Simulate using a JSON response from a few-shot prompt.
 
@@ -123,24 +141,24 @@ class NeuronSimulator:
         tokens and their corresponding activation values. The response is
         validated and parsed; invalid or mismatched responses yield a zero vector
         aligned with the input tokens.
-        
+
         Returns:
             SequenceSimulation object with predicted activations
         """
         prompt = self._make_json_prompt(tokens)
-        
+
         response = await self.client.generate(prompt, max_tokens=JSON_MAX_TOKENS)
         activations = self._parse_json_response(response, tokens)
-        
+
         return SequenceSimulation(
             tokens=list(tokens),
             expected_activations=activations,
             activation_scale=ActivationScale.SIMULATED_NORMALIZED_ACTIVATIONS,
             distribution_values=[],
             distribution_probabilities=[],
-            uncalibrated_simulation=None
+            uncalibrated_simulation=None,
         )
-    
+
     def _make_logprob_prompt(self, tokens: List[str]) -> Any:
         """Create a few-shot prompt for logprob-based activation prediction."""
         prompt_builder = PromptBuilder()
@@ -181,7 +199,7 @@ The activation format is token<tab>activation, activations go from 0 to 10, "unk
             f"\nActivations: {format_sequences_for_simulation([tokens])}",
         )
         return prompt_builder.build(self.prompt_format)
-    
+
     def _make_json_prompt(self, tokens: List[str]) -> Any:
         """Create a few-shot prompt that requests a structured JSON response."""
         prompt_builder = PromptBuilder()
@@ -193,43 +211,54 @@ For each document, you will see the full text of the document, then the tokens i
 
 Fill out the activation values with integer values from 0 to 10. Don't use negative numbers. Please think carefully.""",
         )
-        
+
         # Add few-shot examples for JSON mode
         few_shot_examples = self.few_shot_example_set.get_examples()
         for example in few_shot_examples:
             prompt_builder.add_message(
                 Role.USER,
-                json.dumps({
-                    "to_find": example.explanation,
-                    "document": "".join(example.activation_records[0].tokens),
-                    "activations": [
-                        {"token": t, "activation": None} for t in example.activation_records[0].tokens
-                    ]
-                }),
+                json.dumps(
+                    {
+                        "to_find": example.explanation,
+                        "document": "".join(example.activation_records[0].tokens),
+                        "activations": [
+                            {"token": t, "activation": None}
+                            for t in example.activation_records[0].tokens
+                        ],
+                    }
+                ),
             )
             prompt_builder.add_message(
                 Role.ASSISTANT,
-                json.dumps({
-                    "to_find": example.explanation,
-                    "document": "".join(example.activation_records[0].tokens),
-                    "activations": [
-                        {"token": t, "activation": a} for t, a in zip(example.activation_records[0].tokens, example.activation_records[0].activations)
-                    ]
-                }),
+                json.dumps(
+                    {
+                        "to_find": example.explanation,
+                        "document": "".join(example.activation_records[0].tokens),
+                        "activations": [
+                            {"token": t, "activation": a}
+                            for t, a in zip(
+                                example.activation_records[0].tokens,
+                                example.activation_records[0].activations,
+                            )
+                        ],
+                    }
+                ),
             )
-        
+
         prompt_builder.add_message(
             Role.USER,
-            json.dumps({
-                "to_find": self.explanation,
-                "document": "".join(tokens),
-                "activations": [
-                    {"token": t, "activation": None} for t in tokens
-                ]
-            }),
+            json.dumps(
+                {
+                    "to_find": self.explanation,
+                    "document": "".join(tokens),
+                    "activations": [{"token": t, "activation": None} for t in tokens],
+                }
+            ),
         )
-        return prompt_builder.build(self.prompt_format, allow_extra_system_messages=True)
-    
+        return prompt_builder.build(
+            self.prompt_format, allow_extra_system_messages=True
+        )
+
     def _parse_json_response(self, completion: Any, tokens: List[str]) -> List[float]:
         """Parse and validate a JSON response to extract activations.
 
@@ -242,34 +271,47 @@ Fill out the activation values with integer values from 0 to 10. Don't use negat
         try:
             completion_dict = json.loads(completion.text)
             if "activations" not in completion_dict:
-                logger.error(f"JSON response missing 'activations' key: {completion.text}")
+                logger.error(
+                    f"JSON response missing 'activations' key: {completion.text}"
+                )
                 return zero_prediction
-                
+
             activations_data = completion_dict["activations"]
             if len(activations_data) != len(tokens):
-                logger.error(f"JSON response activations length mismatch. Expected {len(tokens)}, got {len(activations_data)}")
+                logger.error(
+                    f"JSON response activations length mismatch. Expected {len(tokens)}, got {len(activations_data)}"
+                )
                 return zero_prediction
 
             predicted_activations = []
             for activation_entry in activations_data:
-                if "token" not in activation_entry or "activation" not in activation_entry:
+                if (
+                    "token" not in activation_entry
+                    or "activation" not in activation_entry
+                ):
                     logger.error(f"Malformed activation entry: {activation_entry}")
                     predicted_activations.append(0.0)
                     continue
-                    
+
                 try:
                     predicted_activation_float = float(activation_entry["activation"])
-                    if not (0 <= predicted_activation_float <= MAX_NORMALIZED_ACTIVATION):
-                        logger.error(f"Activation value out of range [0,10]: {predicted_activation_float}")
+                    if not (
+                        0 <= predicted_activation_float <= MAX_NORMALIZED_ACTIVATION
+                    ):
+                        logger.error(
+                            f"Activation value out of range [0,10]: {predicted_activation_float}"
+                        )
                         predicted_activations.append(0.0)
                     else:
                         predicted_activations.append(predicted_activation_float)
                 except (ValueError, TypeError):
-                    logger.error(f"Invalid activation value type: {activation_entry['activation']}")
+                    logger.error(
+                        f"Invalid activation value type: {activation_entry['activation']}"
+                    )
                     predicted_activations.append(0.0)
-                    
+
             return predicted_activations
-            
+
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse completion JSON: {completion.text}")
             return zero_prediction

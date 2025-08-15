@@ -2,7 +2,7 @@
 
 This module contains:
 - PromptBuilder: Constructs structured prompts for LLM requests
-- PromptFormat: Enumeration of supported prompt formats  
+- PromptFormat: Enumeration of supported prompt formats
 - Response parsing functions for both logprob and JSON modes
 - LLM-specific utility functions
 """
@@ -13,7 +13,8 @@ import math
 from collections import OrderedDict
 from collections.abc import Sequence
 from enum import Enum
-from typing import TypedDict, Any
+from typing import Any, TypedDict
+
 import tiktoken
 
 # Import data models from our consolidated module
@@ -74,8 +75,10 @@ class PromptBuilder:
         # TODO(sbills): Make the model/encoding configurable. This implementation
         #  assumes GPT-4.
         encoding = tiktoken.get_encoding("cl100k_base")
-        assert prompt_format == PromptFormat.HARMONY_V4, f"Only HARMONY_V4 format is supported, got {prompt_format}"
-        
+        assert (
+            prompt_format == PromptFormat.HARMONY_V4
+        ), f"Only HARMONY_V4 format is supported, got {prompt_format}"
+
         # Approximately-correct implementation adapted from this documentation:
         # https://platform.openai.com/docs/guides/chat/introduction
         num_tokens = 0
@@ -95,15 +98,17 @@ class PromptBuilder:
     ) -> list[HarmonyMessage]:
         """
         Validates the messages added so far (reasonable alternation of assistant
-        vs. user, etc.) and returns a list of HarmonyMessages suitable for use 
+        vs. user, etc.) and returns a list of HarmonyMessages suitable for use
         with the /chat/completions endpoint.
 
         The `allow_extra_system_messages` parameter allows the caller to specify
         that the prompt should be allowed to contain system messages after the very
         first one.
         """
-        assert prompt_format == PromptFormat.HARMONY_V4, f"Only HARMONY_V4 format is supported, got {prompt_format}"
-        
+        assert (
+            prompt_format == PromptFormat.HARMONY_V4
+        ), f"Only HARMONY_V4 format is supported, got {prompt_format}"
+
         # Create a deep copy of the messages so we can modify it and so that the
         # caller can't modify the internal state of this object.
         messages = [message.copy() for message in self._messages]
@@ -123,7 +128,9 @@ class PromptBuilder:
 
         return messages
 
+
 # === RESPONSE PARSING ===
+
 
 def compute_expected_value(
     probabilities_by_distribution_value: OrderedDict[int, float],
@@ -145,11 +152,17 @@ def parse_top_logprobs(top_logprobs: dict[str, float]) -> OrderedDict[int, float
     for token, logprob in top_logprobs.items():
         try:
             distribution_value = int(token)
-            if MIN_NORMALIZED_ACTIVATION <= distribution_value <= MAX_NORMALIZED_ACTIVATION:
+            if (
+                MIN_NORMALIZED_ACTIVATION
+                <= distribution_value
+                <= MAX_NORMALIZED_ACTIVATION
+            ):
                 # Handle both float and Logprob objects
-                logprob_value = float(logprob) if hasattr(logprob, '__float__') else logprob
-                probabilities_by_distribution_value[distribution_value] = (
-                    math.exp(logprob_value)
+                logprob_value = (
+                    float(logprob) if hasattr(logprob, "__float__") else logprob
+                )
+                probabilities_by_distribution_value[distribution_value] = math.exp(
+                    logprob_value
                 )
         except (ValueError, TypeError):
             # Skip non-integer tokens or invalid logprobs
@@ -192,7 +205,7 @@ def parse_simulation_response(
         is being simulated
     """
     logprobs = response.prompt_logprobs
-    
+
     # Handle both old (dict) and new (list) API formats
     if isinstance(logprobs, dict):
         logprobs_lookup = lambda idx: logprobs[idx]
@@ -207,14 +220,14 @@ def parse_simulation_response(
             distribution_values=[[] for _ in tokens],
             distribution_probabilities=[[] for _ in tokens],
         )
-    
+
     # Find penultimate assistant token (this works with llama template)
     assistant_token = tokenized_prompt[-3]
     assistant_token_indices = [
         i for i, token in enumerate(tokenized_prompt) if token == assistant_token
     ]
     start_index = assistant_token_indices[-2]
-    
+
     # Find all the tab tokens after the start index, the next token is the one we care about
     tab_tokens = [
         i + start_index + 1
@@ -230,15 +243,17 @@ def parse_simulation_response(
         token_logprobs = logprobs_lookup(tab_indice)
         if token_logprobs is None:
             continue
-            
+
         # Convert from new API format to expected format
-        # From: {token_id: Logprob(logprob=X, decoded_token="Y")} 
+        # From: {token_id: Logprob(logprob=X, decoded_token="Y")}
         # To: {"Y": X}
         converted_logprobs = {}
         for token_id, logprob_obj in token_logprobs.items():
-            if hasattr(logprob_obj, 'decoded_token') and hasattr(logprob_obj, 'logprob'):
+            if hasattr(logprob_obj, "decoded_token") and hasattr(
+                logprob_obj, "logprob"
+            ):
                 converted_logprobs[logprob_obj.decoded_token] = logprob_obj.logprob
-        
+
         (
             p_by_distribution_value,
             expected_value,

@@ -13,9 +13,10 @@ import torch
 
 from delphi.latents.latents import ActivatingExample, NonActivatingExample
 from delphi.scorers.scorer import Scorer, ScorerResult
+
 from .data_models import ActivationRecord
-from .simulator import NeuronSimulator
 from .scoring import simulate_and_score
+from .simulator import NeuronSimulator
 
 
 class RefactoredOpenAISimulator(Scorer):
@@ -26,12 +27,12 @@ class RefactoredOpenAISimulator(Scorer):
     quantile, and returns the standard scoring structures expected by the
     pipeline.
     """
-    
+
     name = "simulator"
 
     def __init__(self, client, tokenizer, all_at_once=True):
         """Initialize the simulator.
-        
+
         Args:
             client: LLM client for inference
             tokenizer: Tokenizer for converting tokens
@@ -53,16 +54,15 @@ class RefactoredOpenAISimulator(Scorer):
         """
         # Build simulator in requested mode
         simulator = NeuronSimulator(
-            self.client,
-            record.explanation,
-            use_logprobs=self.all_at_once
+            self.client, record.explanation, use_logprobs=self.all_at_once
         )
 
         # Convert examples to activation records
         activation_records = self.to_activation_records(record.test)
         non_activation_records = (
-            self.to_activation_records(record.not_active) 
-            if len(record.not_active) > 0 else []
+            self.to_activation_records(record.not_active)
+            if len(record.not_active) > 0
+            else []
         )
 
         # Run simulation and aggregate scores
@@ -71,7 +71,7 @@ class RefactoredOpenAISimulator(Scorer):
         )
 
         return ScorerResult(record=record, score=legacy_results)
-    
+
     def to_activation_records(
         self, examples: Sequence[ActivatingExample | NonActivatingExample]
     ) -> list[ActivationRecord]:

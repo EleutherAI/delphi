@@ -10,11 +10,18 @@ import asyncio
 import logging
 from collections import defaultdict
 from typing import List, Optional
+
 import numpy as np
 
-from .types import SimulationResult, AggregateResult, ScoredSimulation, convert_to_legacy_format, SequenceSimulation
-from .simulator import NeuronSimulator
 from .data_models import ActivationRecord
+from .simulator import NeuronSimulator
+from .types import (
+    AggregateResult,
+    ScoredSimulation,
+    SequenceSimulation,
+    SimulationResult,
+    convert_to_legacy_format,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,18 +41,20 @@ def fix_nan(val: float) -> str | float:
 
 
 def score_from_simulation(
-    activation_record: ActivationRecord, 
-    sequence_simulation: SequenceSimulation, 
-    correlation_fn
+    activation_record: ActivationRecord,
+    sequence_simulation: SequenceSimulation,
+    correlation_fn,
 ) -> float:
     """Calculate correlation score from a simulation result (backward compatibility)."""
-    return correlation_fn(activation_record.activations, sequence_simulation.expected_activations)
+    return correlation_fn(
+        activation_record.activations, sequence_simulation.expected_activations
+    )
 
 
 async def simulate_and_score(
     simulator: NeuronSimulator,
-    activation_records: List[ActivationRecord], 
-    non_activation_records: Optional[List[ActivationRecord]] = None
+    activation_records: List[ActivationRecord],
+    non_activation_records: Optional[List[ActivationRecord]] = None,
 ) -> List[ScoredSimulation]:
     """Run simulation and compute correlations for multiple sequences.
 
@@ -66,53 +75,58 @@ async def simulate_and_score(
     """
     if non_activation_records is None:
         non_activation_records = []
-    
+
     async def _simulate_and_score_record(record):
         predicted = await simulator.simulate(record.tokens)
-        
+
         # Handle both SequenceSimulation objects and legacy list returns
-        if hasattr(predicted, 'expected_activations'):
+        if hasattr(predicted, "expected_activations"):
             predicted_activations_list = list(predicted.expected_activations)
         elif isinstance(predicted, list):
             predicted_activations_list = predicted
         else:
             # Other iterable type - shouldn't happen
             predicted_activations_list = list(predicted)  # type: ignore
-            
-        correlation = _calculate_correlation(record.activations, predicted_activations_list)
+
+        correlation = _calculate_correlation(
+            record.activations, predicted_activations_list
+        )
         return SimulationResult(
             tokens=record.tokens,
             predicted_activations=predicted_activations_list,
             true_activations=record.activations,
             correlation=correlation,
-            quantile=record.quantile
+            quantile=record.quantile,
         )
-    
-    results = await asyncio.gather(*[
-        _simulate_and_score_record(record) for record in activation_records
-    ])
-    
+
+    results = await asyncio.gather(
+        *[_simulate_and_score_record(record) for record in activation_records]
+    )
+
     groups = defaultdict(list)
     for result in results:
         groups[result.quantile].append(result)
-    
+
     if non_activation_records:
-        non_activating_results = await asyncio.gather(*[
-            _simulate_and_score_record(record) for record in non_activation_records
-        ])
-        
+        non_activating_results = await asyncio.gather(
+            *[_simulate_and_score_record(record) for record in non_activation_records]
+        )
+
         all_sequences = results + non_activating_results
-        
+
         # Add overall group at quantile -1
         groups[-1] = all_sequences
-    
+
     # Return list of aggregate results converted to legacy format
-    aggregates = [_aggregate_group(quantile, sequences)
-                  for quantile, sequences in groups.items()]
+    aggregates = [
+        _aggregate_group(quantile, sequences) for quantile, sequences in groups.items()
+    ]
     return convert_to_legacy_format(aggregates)
 
 
-def _aggregate_group(quantile: int, sequences: List[SimulationResult]) -> AggregateResult:
+def _aggregate_group(
+    quantile: int, sequences: List[SimulationResult]
+) -> AggregateResult:
     """Aggregate per-sequence results into a group-level metric.
 
     Correlation is computed over the concatenation of all true and predicted
@@ -128,34 +142,33 @@ def _aggregate_group(quantile: int, sequences: List[SimulationResult]) -> Aggreg
     """
     if not sequences:
         return AggregateResult(
-            quantile=quantile,
-            correlation=0.0,
-            sequence_count=0,
-            sequences=[]
+            quantile=quantile, correlation=0.0, sequence_count=0, sequences=[]
         )
-    
+
     all_true = []
     all_predicted = []
     for seq in sequences:
         all_true.extend(seq.true_activations)
         all_predicted.extend(seq.predicted_activations)
-    
+
     correlation = _calculate_correlation(all_true, all_predicted)
-        
+
     return AggregateResult(
         quantile=quantile,
         correlation=correlation,
         sequence_count=len(sequences),
-        sequences=sequences
+        sequences=sequences,
     )
 
 
-def _calculate_correlation(true_activations: List[float], predicted_activations: List[float]) -> float:
+def _calculate_correlation(
+    true_activations: List[float], predicted_activations: List[float]
+) -> float:
     """Compute Pearson correlation between two aligned sequences.
-    
+
     This function exactly matches the original correlation_score implementation
     to ensure identical behavior for logprob-free scoring.
-    
+
     Args:
         true_activations: Ground-truth activation values per token.
         predicted_activations: Predicted activation values per token.

@@ -966,5 +966,3 @@ NEWER_SINGLE_TOKEN_EXAMPLE = Example(
     token_index_to_score=18,
     explanation="instances of the token 'ate' as part of another word",
 )
-
-

@@ -8,8 +8,9 @@ This module contains:
 
 import math
 from collections.abc import Sequence
-from typing import Optional
 from dataclasses import dataclass
+from typing import Optional
+
 from simple_parsing import Serializable
 
 # === CONFIGURATION CONSTANTS ===
@@ -37,10 +38,13 @@ EXPLANATION_PREFIX = "the main thing this neuron does is find"
 """Standard prefix used when presenting neuron explanations in prompts."""
 
 # Validation sets for parsing
-VALID_ACTIVATION_TOKENS = set(str(i) for i in range(MIN_NORMALIZED_ACTIVATION, MAX_NORMALIZED_ACTIVATION + 1))
+VALID_ACTIVATION_TOKENS = set(
+    str(i) for i in range(MIN_NORMALIZED_ACTIVATION, MAX_NORMALIZED_ACTIVATION + 1)
+)
 """Set of valid activation value tokens for parsing LLM responses."""
 
 # === DATA STRUCTURES ===
+
 
 @dataclass
 class ActivationRecord(Serializable):
@@ -56,6 +60,7 @@ class ActivationRecord(Serializable):
     """
     Quantile index for this record. Used for grouping records in simulation scoring.
     """
+
 
 # === UTILITY FUNCTIONS ===
 
@@ -87,7 +92,11 @@ def normalize_activations(
     if max_activation <= 0:
         return [0 for x in activation_record]
     return [
-        min(MAX_NORMALIZED_ACTIVATION, math.floor(MAX_NORMALIZED_ACTIVATION * relu(x) / max_activation)) for x in activation_record
+        min(
+            MAX_NORMALIZED_ACTIVATION,
+            math.floor(MAX_NORMALIZED_ACTIVATION * relu(x) / max_activation),
+        )
+        for x in activation_record
     ]
 
 

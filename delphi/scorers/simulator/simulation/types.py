@@ -11,16 +11,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
+
 import numpy as np
 from simple_parsing import Serializable
 
 # === LEGACY TYPES (for backward compatibility) ===
+
 
 class ActivationScale(str, Enum):
     """
     Which "units" are stored in the expected_activations/distribution_values fields of
     a SequenceSimulation.
     """
+
     SIMULATED_NORMALIZED_ACTIVATIONS = "simulated_normalized_activations"
     SIMULATED_UNNORMALIZED_ACTIVATIONS = "simulated_unnormalized_activations"
 
@@ -31,19 +34,19 @@ class SequenceSimulation(Serializable):
 
     tokens: list[str]
     """The sequence of tokens that was simulated."""
-    
+
     expected_activations: list[float]
     """The expected activation value for each token."""
-    
+
     activation_scale: Optional[ActivationScale]
     """The scale/units of the expected_activations values."""
-    
+
     distribution_values: Optional[list[list[int]]] = None
     """For each token, the possible activation values in the distribution."""
-    
+
     distribution_probabilities: Optional[list[list[float]]] = None
     """For each token, the probabilities of each value in distribution_values."""
-    
+
     uncalibrated_simulation: Optional["SequenceSimulation"] = None
     """The result of the simulation before calibration."""
 
@@ -54,22 +57,22 @@ class ScoredSequenceSimulation(Serializable):
     SequenceSimulation result with a score (for that sequence only) and ground truth
     activations.
     """
-    
+
     distance: int
     """Distance of the sequence from the original sequence."""
-    
+
     simulation: SequenceSimulation
     """The simulation result."""
-    
+
     true_activations: list[int]
     """The actual neuron activations for comparison."""
-    
+
     ev_correlation_score: float | str
     """Correlation between expected values and ground truth."""
-    
+
     rsquared_score: int
     """R-squared score (always 0 for compatibility)."""
-    
+
     absolute_dev_explained_score: int
     """Absolute deviation explained score (always 0 for compatibility)."""
 
@@ -80,20 +83,22 @@ class ScoredSimulation(Serializable):
 
     distance: int
     """Distance of the sequence from the original sequence."""
-    
+
     scored_sequence_simulations: list[ScoredSequenceSimulation]
     """Individual sequence results."""
-    
+
     ev_correlation_score: float | str
     """Correlation score, or "nan" if cannot be computed."""
-    
+
     rsquared_score: int
     """R-squared score (always 0 for compatibility)."""
-    
+
     absolute_dev_explained_score: int
     """Absolute deviation explained score (always 0 for compatibility)."""
 
+
 # === MODERN CLEAN TYPES ===
+
 
 @dataclass
 class SimulationResult:
@@ -108,6 +113,7 @@ class SimulationResult:
         quantile: Quantile identifier associated with the sequence (e.g., for
             grouping results).
     """
+
     tokens: List[str]
     predicted_activations: List[float]
     true_activations: List[int]
@@ -128,12 +134,15 @@ class AggregateResult:
         sequence_count: Number of sequences included in the group.
         sequences: The per-sequence results that were aggregated.
     """
+
     quantile: int  # -1 for "overall", 0+ for actual quantiles
     correlation: float
     sequence_count: int
     sequences: List[SimulationResult]
 
+
 # === CONVERSION FUNCTIONS ===
+
 
 def convert_to_legacy_format(results: List[AggregateResult]) -> List[ScoredSimulation]:
     """Convert aggregates to the standard scoring format.
@@ -156,7 +165,7 @@ def convert_to_legacy_format(results: List[AggregateResult]) -> List[ScoredSimul
         external consumption.
     """
     legacy_results = []
-    
+
     for aggregate in results:
         # Convert each sequence to legacy format
         legacy_sequences = []
@@ -167,46 +176,46 @@ def convert_to_legacy_format(results: List[AggregateResult]) -> List[ScoredSimul
                 activation_scale=ActivationScale.SIMULATED_NORMALIZED_ACTIVATIONS,
                 distribution_values=[],  # Empty - not used in simplified version
                 distribution_probabilities=[],  # Empty - not used in simplified version
-                uncalibrated_simulation=None
+                uncalibrated_simulation=None,
             )
-            
+
             # Convert correlation to serializable format
             correlation_score = seq.correlation
             if np.isnan(correlation_score):
                 correlation_score = "nan"
             else:
                 correlation_score = float(correlation_score)
-            
+
             scored_sequence = ScoredSequenceSimulation(
                 distance=seq.quantile,
                 simulation=sequence_simulation,
                 true_activations=seq.true_activations,
                 ev_correlation_score=correlation_score,
                 rsquared_score=0,
-                absolute_dev_explained_score=0
+                absolute_dev_explained_score=0,
             )
             legacy_sequences.append(scored_sequence)
-        
+
         aggregate_correlation = aggregate.correlation
         if np.isnan(aggregate_correlation):
             aggregate_correlation = "nan"
         else:
             aggregate_correlation = float(aggregate_correlation)
-        
+
         # Create legacy ScoredSimulation with distance mapping:
         #  - overall (-1) → 0
         #  - quantile q ≥ 0 → q + 1
         legacy_distance = 0 if aggregate.quantile == -1 else aggregate.quantile + 1
-        
+
         legacy_result = ScoredSimulation(
             distance=legacy_distance,
             scored_sequence_simulations=legacy_sequences,
             ev_correlation_score=aggregate_correlation,
             rsquared_score=0,
-            absolute_dev_explained_score=0
+            absolute_dev_explained_score=0,
         )
         legacy_results.append(legacy_result)
-    
+
     return legacy_results
 
 
