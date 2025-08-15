@@ -130,6 +130,8 @@ class LatentDataset:
         modules: Optional[list[str]] = None,
         latents: Optional[dict[str, torch.Tensor]] = None,
         neighbours_path: Optional[os.PathLike] = None,
+        logits_directory: Optional[os.PathLike] = None,
+        graph_prompt: str = "",
     ):
         """
         Initialize a LatentDataset.
@@ -142,6 +144,7 @@ class LatentDataset:
             tokenizer: Tokenizer used to tokenize the data.
             modules: list of module names to include.
             latents: Dictionary of latents per module.
+            logits_directory: Directory holding the top/bottom logits per latent
         """
         self.constructor_cfg = constructor_cfg
         self.sampler_cfg = sampler_cfg
@@ -149,6 +152,7 @@ class LatentDataset:
         self.all_data: dict[str, dict[int, ActivationData] | None] = {}
         self.tokens = None
         self.neighbours_path = neighbours_path
+        self.logits_directory = logits_directory
         if modules is None:
             self.modules = os.listdir(raw_dir)
         else:
@@ -419,7 +423,6 @@ class LatentDataset:
         if self.tokens is None:
             raise ValueError("Tokens are not loaded")
         record = LatentRecord(latent_data.latent)
-
         # number of activations in the latent
         n_active = len(latent_data.activation_data.activations)
         # number of tokens in the latent
@@ -440,6 +443,7 @@ class LatentDataset:
             tokens=self.tokens,
             tokenizer=self.tokenizer,
             all_data=self.all_data[latent_data.module],
+            logits_directory=self.logits_directory,
         )
         if record is None:
             return None
