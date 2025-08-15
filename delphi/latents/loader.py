@@ -443,7 +443,7 @@ class LatentDataset:
             tokens=self.tokens,
             tokenizer=self.tokenizer,
             all_data=self.all_data[latent_data.module],
-            logits_directory=self.logits_directory
+            logits_directory=self.logits_directory,
         )
         if record is None:
             return None

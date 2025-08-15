@@ -24,11 +24,11 @@ def build_examples(
 
     return examples
 
+
 def build_prompt(
     examples: str,
     activations: bool = False,
     cot: bool = False,
-    
 ) -> list[dict]:
     messages = system(
         cot=cot,

@@ -1,8 +1,8 @@
 import hashlib
+import json
 import os
 from pathlib import Path
 from typing import Optional
-import json
 
 import faiss
 import numpy as np
@@ -336,38 +336,46 @@ def constructor(
     record.not_active = non_activating_examples
     return record
 
+
 def load_graph_info(record: LatentRecord, logits_directory: str) -> LatentRecord:
     """
     Load top and bottom logits from a file based on the latent module name. Also loads
     """
-    import json
-    from delphi import logger
     import re
+
+    from delphi import logger
+
     def cantor(num1, num2):
         return (num1 + num2) * (num1 + num2 + 1) // 2 + num2
+
     match = re.search(r"\d+", record.latent.module_name)
     logits_file = ""
     if match:
         layer = int(match.group(0))
-        logits_file = f"{logits_directory}/{str(cantor(layer,record.latent.latent_index))}.json"
+        logits_file = (
+            f"{logits_directory}/{str(cantor(layer,record.latent.latent_index))}.json"
+        )
 
     else:
         logger.warning(
-            f"Module name does not include layer number. Failed to load logits"
+            "Module name does not include layer number. Failed to load logits"
         )
         logits_file = ""
-    
+
     if os.path.exists(logits_file):
-        with open(logits_file, 'r') as file:
+        with open(logits_file, "r") as file:
             data = json.load(file)
             record.top_logits = data.get("top_logits", [])
             record.bot_logits = data.get("bottom_logits", [])
-            record.parents = [(f,i) for (f,i) in data.get("parent_connections", []) if abs(i) > 0.00001]
+            record.parents = [
+                (f, i)
+                for (f, i) in data.get("parent_connections", [])
+                if abs(i) > 0.00001
+            ]
     else:
-        logger.warning(
-            f"Could not find graph info file. Failed to load logits/parents"
-        )
+        logger.warning("Could not find graph info file. Failed to load logits/parents")
     return record
+
 
 def create_token_key(tokens_tensor, ctx_len):
     """

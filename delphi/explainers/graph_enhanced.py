@@ -1,16 +1,24 @@
 import asyncio
-from collections import defaultdict
-from dataclasses import dataclass
 import os
-import json
-import math
-from typing import Optional, List, Tuple, Dict
+from dataclasses import dataclass
+from typing import Optional
 
 import torch
 
-from delphi.explainers.default.prompts import SYSTEM_GRAPH, GRAPH_PROMPT, TOP_LOGITS, BOT_LOGITS, PARENT_NODE_PROMPT, GRAPH_COT
+from delphi.explainers.default.prompts import (
+    BOT_LOGITS,
+    GRAPH_COT,
+    GRAPH_PROMPT,
+    PARENT_NODE_PROMPT,
+    SYSTEM_GRAPH,
+    TOP_LOGITS,
+)
 from delphi.explainers.explainer import Explainer, ExplainerResult, Response
-from delphi.latents.latents import ActivatingExample, LatentRecord, NonActivatingExample, Latent
+from delphi.latents.latents import (
+    ActivatingExample,
+    LatentRecord,
+    NonActivatingExample,
+)
 
 
 @dataclass
@@ -76,10 +84,13 @@ class GraphExplainer(Explainer):
 
             logger.error("Graph info path is not set.")
             return ExplainerResult(
-                record=record, explanation="Graph info path was not set to a valid file path."
+                record=record,
+                explanation="Graph info path was not set to a valid file path.",
             )
-        
-        parent_explanations_files = record.parents[:min(len(record.parents), self.max_parent_explanations)]
+
+        parent_explanations_files = record.parents[
+            : min(len(record.parents), self.max_parent_explanations)
+        ]
         parent_explanations = []
         for parent, influence in parent_explanations_files:
 
@@ -91,7 +102,13 @@ class GraphExplainer(Explainer):
                 parent_explanations.append((f.read(), influence))
 
         # Build the prompt with both types of examples
-        messages = self._build_prompt(combined_examples, top_logits, bot_logits, self.graph_prompt, parent_explanations)
+        messages = self._build_prompt(
+            combined_examples,
+            top_logits,
+            bot_logits,
+            self.graph_prompt,
+            parent_explanations,
+        )
         # Generate the explanation
         response = await self.client.generate(
             messages, temperature=self.temperature, **self.generation_kwargs
@@ -113,16 +130,15 @@ class GraphExplainer(Explainer):
             return ExplainerResult(record=record, explanation=explanation)
         except Exception as e:
             print(f"Explanation parsing failed: {repr(e)}")
-            return ExplainerResult(
-                record=record, explanation=repr(e)
-            )
+            return ExplainerResult(record=record, explanation=repr(e))
 
     def _build_prompt(  # type: ignore
-        self, examples: list[ActivatingExample | NonActivatingExample],
+        self,
+        examples: list[ActivatingExample | NonActivatingExample],
         top_logits: list[str],
         bot_logits: list[str],
         prompt: str,
-        parent_explanations: list[str]
+        parent_explanations: list[str],
     ) -> list[dict]:
         """
         Build a prompt with graph information
@@ -179,7 +195,9 @@ class GraphExplainer(Explainer):
         if parent_explanations:
             highlighted_examples.append("\nPARENT EXPLANATIONS:")
             for i, (explanation, strength) in enumerate(parent_explanations, 1):
-                highlighted_examples.append(f"Parent Explanation {i}: {explanation} (Strength: {strength})")
+                highlighted_examples.append(
+                    f"Parent Explanation {i}: {explanation} (Strength: {strength})"
+                )
 
         # If a prompt is provided, include it in the messages
         if prompt:
@@ -201,7 +219,9 @@ class GraphExplainer(Explainer):
         graph_prompt = GRAPH_PROMPT if self.graph_prompt else ""
         top_logits_prompt = TOP_LOGITS if self.top_logits else ""
         bot_logits_prompt = BOT_LOGITS if self.bot_logits else ""
-        parent_explanations_prompt = PARENT_NODE_PROMPT if self.max_parent_explanations > 0 else ""
+        parent_explanations_prompt = (
+            PARENT_NODE_PROMPT if self.max_parent_explanations > 0 else ""
+        )
         cot_prompt = GRAPH_COT if self.cot else ""
 
         # Create messages array with the system prompt
@@ -213,7 +233,7 @@ class GraphExplainer(Explainer):
                     top_logits=top_logits_prompt,
                     bot_logits=bot_logits_prompt,
                     parent_explanations=parent_explanations_prompt,
-                    cot=cot_prompt
+                    cot=cot_prompt,
                 ),
             },
             {

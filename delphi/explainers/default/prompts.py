@@ -60,7 +60,7 @@ To better find the explanation for the language patterns go through the followin
 3. Formulate an hypothesis and write down the final explanation using [EXPLANATION]:.
 
 """
-SYSTEM_GRAPH = """You are a meticulous linguist conducting an important investigation into patterns found in language. 
+SYSTEM_GRAPH = """You are a meticulous linguist conducting an important investigation into patterns found in language.
 ### Task:
 Your task is to analyze text and provide an explanation that thoroughly encapsulates possible patterns found in it.
 
@@ -81,7 +81,7 @@ You will also be given additional information that can help you understand the p
 
 ### Guidelines
 {cot}
-""" 
+"""
 
 GRAPH_COT = """
 To better find the explanation for the language patterns, please think step by step using these instructions:
@@ -95,21 +95,21 @@ To better find the explanation for the language patterns, please think step by s
 """
 
 TOP_LOGITS = """
-- A list of the top ten tokens this pattern wants to PROMOTE. 
+- A list of the top ten tokens this pattern wants to PROMOTE.
     - If there is a clear pattern amongst these ten tokens, use it to inform your explanation.
 """
 BOT_LOGITS = """
-- A list of the top ten tokens this pattern wants to SUPRESS. 
+- A list of the top ten tokens this pattern wants to SUPRESS.
     - If there is a clear pattern amongst these ten tokens, use it to inform your explanation.
 """
 GRAPH_PROMPT = """
 - The prompt which caused this feature to activate
-    - If the examples show this feature activating on many types of instances of a general concept, and the prompt indicates one of these instances to be relevant, simplify the explanation to something relevant to the prompt. 
+    - If the examples show this feature activating on many types of instances of a general concept, and the prompt indicates one of these instances to be relevant, simplify the explanation to something relevant to the prompt.
     - For example, if the current examples include highlighted words like  "football, soccer, tennis, basketball" and the prompt has "michael jordan", then we can be more specific and say "basketball and other sports terms"
 """
 
 PARENT_NODE_PROMPT = """
-- A list of explanations of features related to this feature. 
+- A list of explanations of features related to this feature.
     - This relationship is quantified with a strength value and be should be considered accordingly.
     - For example, if the current examples include highlighted words like "dog, building, tree, playground" and there is a connection to a feature called "pets" with strength 0.8, then this feature is probably detecting dogs.
 """
