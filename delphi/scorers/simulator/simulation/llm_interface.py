@@ -34,9 +34,9 @@ HarmonyMessage = TypedDict(
 
 class PromptFormat(str, Enum):
     """
-    Prompt format for the Harmony models that use a structured turn-taking 
+    Prompt format for the Harmony models that use a structured turn-taking
     role+content format.
-    Generates a list of HarmonyMessage dicts that can be sent to the 
+    Generates a list of HarmonyMessage dicts that can be sent to the
     /chat/completions endpoint.
     """
 
@@ -230,7 +230,7 @@ def parse_simulation_response(
     ]
     start_index = assistant_token_indices[-2]
 
-    # Find all the tab tokens after the start index, the next token is the one 
+    # Find all the tab tokens after the start index, the next token is the one
     # we care about
     tab_tokens = [
         i + start_index + 1
