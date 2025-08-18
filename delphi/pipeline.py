@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterable, Awaitable, Callable
 from functools import wraps
-from typing import Any
+from typing import Any, List
 
 from tqdm.asyncio import tqdm
 
@@ -35,6 +35,23 @@ def process_wrapper(
         if postprocess is not None:
             results = postprocess(results)
 
+        return results
+
+    return wrapped
+
+
+def fan_out_fan_in_wrapper(
+    function: Callable[..., Awaitable],
+) -> Callable[..., Awaitable]:
+    """
+    Wraps a function with fan-out and fan-in steps.
+    Applies the function element-wise to a list of inputs.
+    """
+
+    @wraps(function)
+    async def wrapped(input: List[Any]) -> List[Any]:
+        tasks = [asyncio.create_task(function(item)) for item in input]
+        results = await asyncio.gather(*tasks)
         return results
 
     return wrapped
