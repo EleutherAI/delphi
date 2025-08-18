@@ -3,7 +3,6 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "6,7"
 
 import asyncio
-
 from functools import partial
 from pathlib import Path
 from typing import Callable
@@ -22,9 +21,9 @@ from transformers import (
 
 from delphi.delphi.clients import Offline, OpenRouter
 from delphi.delphi.config import (
-    RunConfig,
     CacheConfig,
     ConstructorConfig,
+    RunConfig,
     SamplerConfig,
 )
 from delphi.delphi.explainers import DefaultExplainer
