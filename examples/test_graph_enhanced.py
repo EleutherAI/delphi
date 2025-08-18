@@ -1,22 +1,3 @@
-#!/usr/bin/env python3
-"""
-Basic Explanation Generation Script
-
-This script demonstrates how to generate explanations from a pre-existing cache
-without any fancy tricks. It's a minimal example showing the core workflow:
-1. Load cached activations
-2. Create a dataset from the cache
-3. Generate explanations using a simple explainer
-4. Save the results
-
-Usage:
-    python examples/basic_explanation_generation.py
-
-Prerequisites:
-    - You must have a pre-existing cache directory (created by running the main pipeline first)
-    - Set OPENROUTER_API_KEY environment variable if using OpenRouter
-"""
-
 import asyncio
 import json
 import math
@@ -160,7 +141,7 @@ def build_adjacency_list(
 
 def topological_sort(adjacency_list: Dict[str, List[str]]) -> List[str]:
     """
-    Topological sort using Kahn's algorithm with enhanced error handling.
+    Topological sort using Kahn's algorithm with error handling.
 
     Returns:
         List of nodes in dependency order (parents before children)
@@ -298,15 +279,16 @@ def add_parent_connections_to_all_nodes(
     Add parent connection information to all node JSON files in a directory.
 
     This function efficiently processes all nodes in an attribution graph and adds
-    parent connection information to their corresponding JSON files. The parent_connections
-    field contains a list of (parent_filename, attribution_strength) tuples.
+    parent connection information to their corresponding JSON files.
+    The parent_connections field contains a list of
+    (parent_filename, attribution_strength) tuples.
 
     Args:
         graph_json_path: Path to the attribution graph JSON file
-        json_directory: Directory containing individual node JSON files named with cantor encoding
+        json_directory: path containing the feature json files
         force_recreate: If True, recreate parent_connections even if it already exists
 
-    The function expects JSON files to be named using cantor encoding of (layer, feature_idx).
+    Files must be named using cantor encoding of (layer, feature_idx).
     If a JSON file doesn't exist, it creates a new one with basic structure.
 
     Example usage:
@@ -325,7 +307,7 @@ def add_parent_connections_to_all_nodes(
     print(f"Loading attribution graph from {graph_json_path}...")
     graph = load_graph(graph_json_path)
 
-    # Build comprehensive mapping from cantor-encoded features to (layer, feature) and node IDs
+    # Mapping from cantor-encoded features to (layer, feature) and node IDs
     print("Building node mappings...")
     cantor_to_layer_feature = {}  # {cantor_encoded: (layer, feature)}
     cantor_to_node_ids = defaultdict(set)  # {cantor_encoded: {node_id1, node_id2, ...}}
@@ -592,15 +574,15 @@ def generate_cache_from_model(
     log_path = cache_path.parent / "log"
     log_path.mkdir(parents=True, exist_ok=True)
 
-    print(f"🤖 Loading base model: {base_model_path}")
+    print(f" Loading base model: {base_model_path}")
     # Load base model
     model = load_model_with_fallback(base_model_path, load_in_8bit, hf_token)
 
-    print("🔤 Loading tokenizer...")
+    print(" Loading tokenizer...")
     # Load tokenizer
     tokenizer = load_tokenizer_with_fallback(base_model_path, hf_token)
 
-    print(f"🧠 Loading sparse autoencoders: {sparse_model_path}")
+    print(f" Loading sparse autoencoders: {sparse_model_path}")
     print(f"   Hookpoints: {hookpoints}")
     # Load sparse autoencoders and create encoding hooks
     hookpoint_to_sparse_encode, transcode = load_sparsify_hooks(
@@ -610,7 +592,7 @@ def generate_cache_from_model(
         compile=True,
     )
 
-    print(f"📚 Loading and tokenizing dataset: {dataset_repo}")
+    print(f"   Loading and tokenizing dataset: {dataset_repo}")
     print(f"   Split: {dataset_split}, Column: {dataset_column}")
     print(f"   Context length: {ctx_len}, Tokens to process: {n_tokens:,}")
     # Load and tokenize dataset
@@ -656,11 +638,11 @@ def generate_cache_from_model(
     # Run the caching process
     cache.run(n_tokens, tokens)
 
-    print("📊 Generating cache statistics...")
+    print("  Generating cache statistics...")
     # Generate statistics
     cache.generate_statistics_cache()
 
-    print("💾 Saving cache to disk...")
+    print("  Saving cache to disk...")
     print(f"   Cache directory: {cache_dir}")
     print(f"   Number of splits: {n_splits}")
     # Save cache splits
@@ -681,7 +663,7 @@ def generate_cache_from_model(
     )
     cache.save_config(save_dir=cache_path, cfg=cache_cfg, model_name=base_model_path)
 
-    print("✅ Cache generation complete!")
+    print("  Cache generation complete!")
     print(f"   Cache saved to: {cache_dir}")
     print(f"   Hookpoints processed: {list(hookpoint_to_sparse_encode.keys())}")
 
@@ -735,19 +717,27 @@ async def generate_explanations_from_cache(
         min_examples=50,  # Minimum activatioons needed to explain a latent
         n_non_activating=0,  # Number of non-activating examples
         center_examples=True,  # Center examples on the activating token
-        non_activating_source="random",  # Use random non-activating examples (no fancy tricks)
+        non_activating_source="random",
     )
 
     # Load attribution graph and extract features to explain
-    logits_dir = "/mnt/ssd-1/soar-automated_interpretability/graphs/pawan/delphi-env/attribute/attribution-graphs-frontend/features/gemmascope-transcoders-sparsify-1m"
-    mj_graph_dir = "/mnt/ssd-1/soar-automated_interpretability/graphs/pawan/delphi-env/attribute/attribution-graphs-frontend/graph_data/gemma-bball.json"
+    logits_dir = (
+        "/mnt/ssd-1/soar-automated_interpretability/graphs/"
+        "pawan/delphi-env/attribute/attribution-graphs-frontend/"
+        "features/gemmascope-transcoders-sparsify-1m"
+    )
+    graph_dir = (
+        "/mnt/ssd-1/soar-automated_interpretability/graphs/"
+        "pawan/delphi-env/attribute/attribution-graphs-frontend/"
+        "graph_data/gemma-bball.json"
+    )
 
     start = time.time()
-    add_parent_connections_to_all_nodes(mj_graph_dir, logits_dir)
+    add_parent_connections_to_all_nodes(graph_dir, logits_dir)
     print(f"Parent connections added in {time.time() - start:.2f} seconds")
 
-    print(f"Loading attribution graph from {mj_graph_dir}...")
-    graph_data = load_graph(mj_graph_dir)
+    print(f"Loading attribution graph from {graph_dir}...")
+    graph_data = load_graph(graph_dir)
 
     # Extract prompt for context
     prompt = graph_data["metadata"]["prompt"]
@@ -788,7 +778,9 @@ async def generate_explanations_from_cache(
         latent_dict[key] = torch.tensor(latent_dict[key])
 
     print(
-        f"Prepared latent dict with {sum(len(v) for v in latent_dict.values())} features across {len(latent_dict)} modules"
+        f"LatentData created with"
+        f"{sum(len(v) for v in latent_dict.values())} features and"
+        f"{len(latent_dict)} modules"
     )
     # Note: LatentDataset will be created per iteration with only the ready nodes
 
@@ -797,7 +789,7 @@ async def generate_explanations_from_cache(
     if use_openrouter:
         if "OPENROUTER_API_KEY" not in os.environ:
             raise ValueError(
-                "OPENROUTER_API_KEY environment variable must be set when using OpenRouter"
+                "set OPENROUTER_API_KEY environment variable to use OpenRouter"
             )
 
         client = OpenRouter(explainer_model, api_key=os.environ["OPENROUTER_API_KEY"])
@@ -816,7 +808,7 @@ async def generate_explanations_from_cache(
         client,
         threshold=0.5,  # Activation threshold for highlighting tokens
         verbose=True,  # Print explanations as they're generated
-        graph_info_path=mj_graph_dir,
+        graph_info_path=graph_dir,
         explanations_dir=output_path,
         graph_prompt=prompt,
         max_parent_explanations=2,
@@ -827,12 +819,6 @@ async def generate_explanations_from_cache(
     # Create pipeline for this iteration
     def explanation_postprocess(result):
         """Save each explanation to a separate file and track it."""
-        # Convert module name back to node name format
-        layer = result.record.latent.module_name.split(".")[
-            -2
-        ]  # Extract layer number from "layers.X.mlp"
-        node_name = f"{layer}_{result.record.latent.latent_index}"
-        # Save to file
         output_file = output_path / f"{result.record.latent}.txt"
         with open(output_file, "wb") as f:
             f.write(orjson.dumps(result.explanation))
@@ -870,9 +856,7 @@ async def generate_explanations_from_cache(
             iteration_latent_dict = explanation_pipeline.create_latent_dict_for_nodes(
                 ready_nodes
             )
-            print(
-                f"Created latent dict with {sum(len(v) for v in iteration_latent_dict.values())} features across {len(iteration_latent_dict)} modules"
-            )
+            print("Created latent dict")
 
             # Create LatentDataset for this batch
             iteration_dataset = LatentDataset(
@@ -924,7 +908,10 @@ async def main():
 
     # MODELS BEING ANALYZED (the subject of interpretability)
     base_model_path = "google/gemma-2-2b-it"
-    sparse_model_path = "/mnt/ssd-1/soar-automated_interpretability/graphs/pawan/delphi-env/models/gemmascope-transcoders-sparsify-1m"
+    sparse_model_path = (
+        "/mnt/ssd-1/soar-automated_interpretability/graphs/pawan/"
+        "delphi-env/models/gemmascope-transcoders-sparsify-1m"
+    )
 
     # Hookpoints to process (which layers to attach replacement models to)
     hookpoints = ["layers.5.mlp"]
@@ -938,7 +925,10 @@ async def main():
     # explainer_type = "graph"
 
     # Paths
-    cache_dir = "/mnt/ssd-1/soar-automated_interpretability/graphs/pawan/delphi-env/delphi/results/gemma2b/latents"
+    cache_dir = (
+        "/mnt/ssd-1/soar-automated_interpretability/graphs/"
+        "pawan/delphi-env/delphi/results/gemma2b/latents"
+    )
     output_dir = (
         f"results/graph_enhanced_{explainer_model.split('/')[-1]}_{explainer_type}"
     )
