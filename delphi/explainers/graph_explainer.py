@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from dataclasses import dataclass
 from typing import Optional
@@ -23,7 +24,7 @@ from delphi.latents.latents import (
 
 @dataclass
 class GraphExplainer(Explainer):
-    activations: bool = False
+    activations: bool = True
     """Whether to show activations to the explainer."""
     cot: bool = False
     """Whether to use chain of thought reasoning in the prompt."""
@@ -93,7 +94,6 @@ class GraphExplainer(Explainer):
         ]
         parent_explanations = []
         for parent, influence in parent_explanations_files:
-
             parent_path = os.path.join(self.explanations_dir, str(parent))
             if not os.path.exists(parent_path):
                 print(f"Parent explanation file does not exist: {parent_path}")
@@ -120,17 +120,17 @@ class GraphExplainer(Explainer):
             else:
                 response_text = response
             explanation = self.parse_explanation(response_text)
-            if self.verbose:
-                from delphi import logger
-
-                logger.info(f"Explanation: {explanation}")
-                logger.info(f"Messages: {messages[-1]['content']}")
-                logger.info(f"Response: {response}")
-
-            return ExplainerResult(record=record, explanation=explanation)
+            return ExplainerResult(
+                record=record,
+                explanation=explanation,
+                prompt=messages[1]["content"],
+                response=response_text,
+            )
         except Exception as e:
             print(f"Explanation parsing failed: {repr(e)}")
-            return ExplainerResult(record=record, explanation=repr(e))
+            return ExplainerResult(
+                record=record, explanation=repr(e), prompt=messages[1]["content"]
+            )
 
     def _build_prompt(  # type: ignore
         self,
@@ -209,11 +209,11 @@ class GraphExplainer(Explainer):
         if bot_logits:
             highlighted_examples.append(f"\nBOTTOM LOGITS: {', '.join(bot_logits)}")
 
-        highlighted_examples.append("\n### Now output the explanation as requested:")
+        highlighted_examples.append(
+            "\n### Now output the explanation as requested:\n /no_think"
+        )
         # Join all sections into a single string
         highlighted_examples_str = "\n".join(highlighted_examples)
-        with open("prompt_log.txt", "w+") as f:
-            f.write(highlighted_examples_str)
 
         # build the system prompt
         graph_prompt = GRAPH_PROMPT if self.graph_prompt else ""
@@ -245,3 +245,12 @@ class GraphExplainer(Explainer):
     def call_sync(self, record):
         """Synchronous wrapper for the asynchronous __call__ method."""
         return asyncio.run(self.__call__(record))
+
+    def _log_prompt(self, prompt, feature, output):
+        log_entry = {
+            "feature": feature,
+            "prompt": prompt,
+            "output": output,
+        }
+        with open("prompt_log.jsonl", "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
