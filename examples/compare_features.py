@@ -1,18 +1,10 @@
-#!/usr/bin/env python3
-"""
-Script to compare Neuronpedia graph features with Delphi explanations.
-
-This script takes two JSON files:
-1. Neuronpedia graph JSON with nodes containing node_id, clerp explanations
-2. Delphi explanations JSONL with feature IDs and explanation outputs
-
-It finds common features and creates comparison outputs.
-"""
-
 import argparse
 import json
 import re
-from typing import Dict
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from vllm import LLM, SamplingParams
 
 
 def parse_neuronpedia_features(neuronpedia_file: str) -> Dict[str, dict]:
@@ -70,8 +62,18 @@ def parse_delphi_features(delphi_file: str) -> Dict[str, dict]:
                         feature = match.group(2)
                         feature_id = f"{layer}_{feature}"
 
-                        # Extract explanation from output
-                        explanation = output_field.strip()
+                        # Extract explanation from output field
+                        # Handle both old format (with "[EXPLANATION]: " prefix)
+                        # and new format (direct explanation)
+                        explanation = ""
+                        if "[EXPLANATION]: " in output_field:
+                            # Old format: extract after "[EXPLANATION]: "
+                            explanation = output_field.split("[EXPLANATION]: ")[
+                                -1
+                            ].strip()
+                        else:
+                            # New format: use output field directly
+                            explanation = output_field.strip()
 
                         features[feature_id] = {
                             "explanation": explanation,
@@ -81,6 +83,241 @@ def parse_delphi_features(delphi_file: str) -> Dict[str, dict]:
                         }
 
     return features
+
+
+def setup_vllm_client(
+    model_name: str = "meta-llama/Llama-3.1-8B-Instruct",
+) -> Optional[LLM]:
+    """
+    Set up VLLM client for explanation comparison.
+    """
+    try:
+        print(f"Loading model {model_name}...")
+        llm = LLM(
+            model=model_name,
+            max_model_len=1024,
+            tensor_parallel_size=1,
+            gpu_memory_utilization=0.9,
+            enforce_eager=True,
+        )
+        return llm
+    except Exception as e:
+        print(f"Failed to load VLLM model: {e}")
+        return None
+
+
+def parse_rationale_and_score(response: str) -> tuple[str, int]:
+    """
+    Parse both rationale and similarity score from LLM response.
+    Returns tuple of (rationale, score)
+    """
+    import re
+
+    # Try to extract rationale and score using the expected format
+    rationale_pattern = r"rationale:\s*(.+?)(?=score:|$)"
+    score_pattern = r"score:\s*([012])"
+
+    rationale = ""
+    score = 0  # Default score
+
+    # Extract rationale
+    rationale_match = re.search(rationale_pattern, response, re.IGNORECASE | re.DOTALL)
+    if rationale_match:
+        rationale = rationale_match.group(1).strip()
+        # Clean up rationale (remove extra whitespace, newlines)
+        rationale = " ".join(rationale.split())
+
+    # Extract score
+    score_match = re.search(score_pattern, response, re.IGNORECASE)
+    if score_match:
+        score = int(score_match.group(1))
+    else:
+        # Fallback: look for any score in the response
+        fallback_patterns = [
+            r"\b([123])\b.*(?:similar|score)",
+            r"([123])\s*[-/]",
+            r"^([123])",  # Score at beginning
+            r"([123])$",  # Score at end
+        ]
+
+        for pattern in fallback_patterns:
+            match = re.search(pattern, response.lower())
+            if match:
+                score = int(match.group(1))
+                break
+        else:
+            # Semantic indicators as final fallback
+            response_lower = response.lower()
+            if any(
+                word in response_lower
+                for word in [
+                    "very similar",
+                    "highly similar",
+                    "nearly identical",
+                    "almost same",
+                ]
+            ):
+                score = 3
+            elif any(
+                word in response_lower
+                for word in ["not similar", "different", "unrelated", "dissimilar"]
+            ):
+                score = 1
+
+    # If no rationale was extracted, try to get first sentence of response
+    if not rationale:
+        sentences = response.split(".")
+        if sentences:
+            rationale = sentences[0].strip()
+            if not rationale and len(sentences) > 1:
+                rationale = sentences[1].strip()
+
+    return rationale, score
+
+
+def create_comparison_prompts(common_features: List[Dict]) -> List[str]:
+    """
+    Create comparison prompts for all features.
+    """
+    prompts = []
+    for feature in common_features:
+        prompt = f"""
+### Task
+You will be given two descriptions about some set of words.
+Compare how similar Explanation B is to Explanation A (the ground truth)
+You will use a scale from 0 to 2 for how similar they are:
+0 = Not related at all
+1 = Weakly related
+2 = Very closely related
+
+Be strict and sparingly give scores of 2
+### Output format
+First provide a one-sentence rationale for your rating, then provide the numeric score.
+Rationale:
+[your reasoning]
+Score: [number]
+
+### Examples
+A: proper nouns, especially political figures
+B: Names of notable people and places
+Rationale:
+B talks about proper nouns but does not mention political figures in particular.
+Score: 1
+
+A: of
+B: Possessive or relational prepositions
+Rationale:
+B is only barely related to A but is very broad.
+Score: 1
+
+A: verbs
+B: Verbs indicating actions or states
+Rationale:
+Both talk about verbs.
+Score: 2
+
+A: the phrase "we all know" and similar constructions
+B: Knowing or understanding facts about sports
+Rationale:
+B does not mention the phrase "we all know" or mention expressions at all.
+Score: 0
+
+### Real query
+Using the above information as guidance, answer for the following pair:
+A: {feature['neuronpedia_explanation'].strip()}
+B: {feature['delphi_explanation'].strip()}
+/no_think
+"""
+        prompts.append(prompt)
+    return prompts
+
+
+def process_explanation_comparisons(llm: LLM, common_features: List[Dict]) -> Dict:
+    """
+    Process all common features through LLM for similarity scoring using batch
+    processing.
+    """
+    if not llm:
+        return {
+            "total_score": 0,
+            "max_possible": 0,
+            "average_score": 0.0,
+            "individual_scores": [],
+        }
+
+    print(
+        f"Comparing {len(common_features)} feature explanations with LLM "
+        f"(batch processing)..."
+    )
+
+    # Create all prompts at once
+    prompts = create_comparison_prompts(common_features)
+
+    # Set up sampling parameters
+    sampling_params = SamplingParams(temperature=0.1, max_tokens=50, top_p=0.9)
+
+    try:
+        # Process all prompts in one batch - let VLLM handle the batching
+        print("Generating LLM responses...")
+        outputs = llm.generate(prompts, sampling_params)
+
+        # Parse all responses
+        individual_scores = []
+        total_score = 0
+
+        for feature, output in zip(common_features, outputs):
+            response = output.outputs[0].text.strip()
+            rationale, score = parse_rationale_and_score(response)
+
+            individual_scores.append(
+                {
+                    "layer_feature_id": feature["layer_feature_id"],
+                    "score": score,
+                    "rationale": rationale,
+                    "neuronpedia_explanation": feature["neuronpedia_explanation"],
+                    "delphi_explanation": feature["delphi_explanation"],
+                }
+            )
+
+            total_score += score
+
+        max_possible = len(common_features) * 2
+        average_score = total_score / len(common_features) if common_features else 0.0
+
+        print(f"Completed batch processing of {len(common_features)} comparisons")
+
+        return {
+            "total_score": total_score,
+            "max_possible": max_possible,
+            "average_score": average_score,
+            "individual_scores": individual_scores,
+        }
+
+    except Exception as e:
+        print(f"Error during batch LLM comparison: {e}")
+        # Return default scores for all features
+        individual_scores = []
+        for feature in common_features:
+            individual_scores.append(
+                {
+                    "layer_feature_id": feature["layer_feature_id"],
+                    "score": 2,  # Default middle score
+                    "rationale": "Error during LLM comparison",
+                    "neuronpedia_explanation": feature["neuronpedia_explanation"],
+                    "delphi_explanation": feature["delphi_explanation"],
+                }
+            )
+
+        total_score = len(common_features) * 2
+        max_possible = len(common_features) * 3
+        average_score = 2.0
+
+        return {
+            "total_score": total_score,
+            "max_possible": max_possible,
+            "average_score": average_score,
+            "individual_scores": individual_scores,
+        }
 
 
 def compare_features(
@@ -141,6 +378,14 @@ def create_html_table(comparison_data: Dict, output_file: str):
     # Convert features to JSON for JavaScript
     features_json = json.dumps(shuffled_features)
 
+    # Extract summary values for shorter lines
+    summary = comparison_data["summary"]
+    total_np = summary["total_neuronpedia_features"]
+    total_delphi = summary["total_delphi_features"]
+    common_features = summary["common_features"]
+    only_np = summary["only_in_neuronpedia"]
+    only_delphi = summary["only_in_delphi"]
+
     html_content = f"""
 <!DOCTYPE html>
 <html>
@@ -148,13 +393,13 @@ def create_html_table(comparison_data: Dict, output_file: str):
     <title>Feature Comparison: Neuronpedia vs Delphi</title>
     <style>
         body {{
-            font-family: Poppins;
-            font-size: 24pt;
+            font-family: Arial;
+            font-size: 14pt;
+            margin: 20px;
             max-width: 1200px;
             margin-left: auto;
             margin-right: auto;
             padding: 0 40px;
-            margin: 20px;
         }}
         table {{
             border-collapse: collapse;
@@ -229,33 +474,34 @@ def create_html_table(comparison_data: Dict, output_file: str):
 
     <div class="summary">
         <h2>Summary</h2>
-        <p>
-            <strong>Total Neuronpedia Features:</strong>
-            {comparison_data["summary"]["total_neuronpedia_features"]}
+        <p><strong>Total Neuronpedia Features:</strong> {total_np}</p>
+        <p><strong>Total Delphi Features:</strong> {total_delphi}</p>
+        <p><strong>Common Features:</strong> {common_features}</p>
+        <p><strong>Only in Neuronpedia:</strong> {only_np}</p>
+        <p><strong>Only in Delphi:</strong> {only_delphi}</p>"""
+
+    # Add comparison scores if available
+    if "llm_comparison" in comparison_data:
+        comp = comparison_data["llm_comparison"]
+        html_content += f"""
+        <p><strong>LLM Similarity Score:</strong>
+        {comp['total_score']}/{comp['max_possible']}
+        (avg: {comp['average_score']:.2f})</p>
+        """
+
+    html_content += f"""
+        <p class="selection-counter"><strong>
+            Selected Rows:</strong> <span id="selectedCount">0</span>
         </p>
-        <p><strong>Total Delphi Features:</strong>
-          {comparison_data["summary"]["total_delphi_features"]}
-        </p>
-        <p><strong>Common Features:</strong>
-            {comparison_data["summary"]["common_features"]}
-        </p>
-        <p><strong>Only in Neuronpedia:</strong>
-            {comparison_data["summary"]["only_in_neuronpedia"]}
-        </p>
-        <p><strong>Only in Delphi:</strong>
-            {comparison_data["summary"]["only_in_delphi"]}
-        </p>
-        <p class="selection-counter">
-            <strong>Selected Rows:</strong> <span id="selectedCount">0</span>
-            </p>
     </div>
 
     <div class="controls">
         <button id="viewToggle" class="toggle-button" onclick="toggleView()">
-            Show Random 100
+        Show Random 100
         </button>
-        <span class="selection-counter">Currently showing: <span id="currentView">
-            All {comparison_data["summary"]["common_features"]} features
+        <span class="selection-counter">
+            Currently showing: <span id="currentView">
+                All {common_features} features
             </span>
         </span>
     </div>
@@ -268,6 +514,8 @@ def create_html_table(comparison_data: Dict, output_file: str):
                 <th>Feature</th>
                 <th>Neuronpedia Explanation</th>
                 <th>Delphi Explanation</th>
+                <th>LLM Score</th>
+                <th>LLM Rationale</th>
             </tr>
         </thead>
         <tbody id="featuresTableBody">
@@ -309,6 +557,10 @@ def create_html_table(comparison_data: Dict, output_file: str):
                     <td>${{feature.feature}}</td>
                     <td>${{feature.neuronpedia_explanation}}</td>
                     <td>${{feature.delphi_explanation}}</td>
+                    <td>${{feature.llm_score !== null ?
+                        feature.llm_score : 'N/A'}}</td>
+                    <td>${{feature.llm_rationale !== null ?
+                        feature.llm_rationale : 'N/A'}}</td>
                 `;
 
                 tbody.appendChild(row);
@@ -416,6 +668,16 @@ def main():
     parser.add_argument(
         "--output", default="results", help="Output directory path (default: results)"
     )
+    parser.add_argument(
+        "--compare",
+        action="store_true",
+        help="Use VLLM to compare explanation similarity (requires VLLM)",
+    )
+    parser.add_argument(
+        "--model",
+        default="meta-llama/Llama-3.1-8B-Instruct",
+        help="Model to use for comparison (default: meta-llama/Llama-3.1-8B-Instruct)",
+    )
 
     args = parser.parse_args()
 
@@ -430,7 +692,44 @@ def main():
     print("Comparing features...")
     comparison_data = compare_features(neuronpedia_features, delphi_features)
 
+    # Add LLM comparison if requested
+    if args.compare:
+        print("Setting up VLLM for explanation comparison...")
+        llm = setup_vllm_client(args.model)
+
+        if llm:
+            llm_results = process_explanation_comparisons(
+                llm, comparison_data["common_features"]
+            )
+            comparison_data["llm_comparison"] = llm_results
+
+            # Merge LLM scores and rationales back into common_features
+            score_lookup = {
+                item["layer_feature_id"]: item
+                for item in llm_results["individual_scores"]
+            }
+            for feature in comparison_data["common_features"]:
+                feature_id = feature["layer_feature_id"]
+                if feature_id in score_lookup:
+                    feature["llm_score"] = score_lookup[feature_id]["score"]
+                    feature["llm_rationale"] = score_lookup[feature_id]["rationale"]
+                else:
+                    feature["llm_score"] = None
+                    feature["llm_rationale"] = None
+
+            print("\nLLM Comparison Results:")
+            print(
+                f"  Total Score: {llm_results['total_score']}/"
+                f"{llm_results['max_possible']}"
+            )
+            print(f"  Average Score: {llm_results['average_score']:.2f}")
+        else:
+            print("Failed to initialize VLLM - skipping explanation comparison")
+
     print("Saving results...")
+    # Create output directory if it doesn't exist
+    Path(args.output).mkdir(parents=True, exist_ok=True)
+
     # Save JSON output
     with open(f"{args.output}/comparison_results.json", "w") as f:
         json.dump(comparison_data, f, indent=2)
@@ -446,6 +745,13 @@ def main():
     print(f"  Common features: {comparison_data['summary']['common_features']}")
     print(f"  Only in Neuronpedia: {comparison_data['summary']['only_in_neuronpedia']}")
     print(f"  Only in Delphi: {comparison_data['summary']['only_in_delphi']}")
+
+    if "llm_comparison" in comparison_data:
+        comp = comparison_data["llm_comparison"]
+        print(
+            f"  LLM Similarity Score: {comp['total_score']}/"
+            f"{comp['max_possible']} (avg: {comp['average_score']:.2f})"
+        )
 
 
 if __name__ == "__main__":

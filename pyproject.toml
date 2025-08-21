@@ -22,13 +22,13 @@ dependencies = [
     "blobfile",
     "bitsandbytes",
     "flask",
-    "vllm<0.8.4",
+    "vllm==0.8.4",
     "aiofiles",
     "sentence_transformers",
     "anyio>=4.8.0",
     "faiss-cpu",
     "asyncer>=0.0.8",
-    "beartype"
+    "beartype",
 ]
 
 [project.optional-dependencies]
