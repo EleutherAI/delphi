@@ -27,7 +27,6 @@ SYSTEM = """You are a meticulous AI researcher conducting an important investiga
 Guidelines:
 
 You will be given a list of text examples on which special words are selected and between delimiters like <<this>>. If a sequence of consecutive tokens all are important, the entire sequence of tokens will be contained between delimiters <<just like this>>. How important each token is for the behavior is listed after each example in parentheses.
-
 - Try to produce a concise final description. Simply describe the text latents that are common in the examples, and what patterns you found.
 - If the examples are uninformative, you don't need to mention them. Don't focus on giving examples of important tokens, but try to summarize the patterns found in the examples.
 - Do not mention the marker tokens (<< >>) in your explanation.
@@ -61,7 +60,54 @@ To better find the explanation for the language patterns go through the followin
 3. Formulate an hypothesis and write down the final explanation using [EXPLANATION]:.
 
 """
+SYSTEM_GRAPH = """You are a meticulous multi-lingual researcher conducting an important investigation into patterns found in language.
+### Task:
+Your task is to analyze text and provide an explanation that thoroughly encapsulates possible patterns found in it.
 
+### Inputs:
+You will be given a list of text examples on which special words are selected and between delimiters like <<this>>.
+How important each token is for the behavior is listed after each example in parentheses.
+You will also be given additional information that can help you understand the patterns better, such as:
+{graph_prompt}
+{parent_explanations}
+{top_logits}
+{bot_logits}
+
+### Required Output:
+- Analyze text and provide an explanation that encapsulates possible patterns found in it.
+- The explanation must be **10 words or less**
+- The **explanation must be specific in order to be helpful**, at the cost of not covering all examples.
+- Do not mention the marker tokens (<< >>) in your explanation.
+- The last line of your response must be the formatted explanation, using [EXPLANATION]:
+{cot}
+"""
+
+GRAPH_COT = """
+### Guidelines
+To better find the explanation for the language patterns, please think step by step using these instructions:
+1a. Come up with an initial hypothesis which summarizes the special words in the example.
+1b. Sometimes, the pattern appears before or after the special word. For example an explanation could be "preceeds a comma"
+2. Look at the prompt and parent explanations to see if there is a recurring theme or a more specific explanation that fits the examples.
+3. Look at the top and bottom logits provided. If they all seem to be related to each other, then consider this information. Otherwise, ignore it.
+4. Turn the initial general hypothesis into a more specific one if the additional information suggests it.
+5. Write down the final explanation using [EXPLANATION]:
+"""
+
+TOP_LOGITS = """
+- A list of the top ten tokens this pattern wants to PROMOTE."""
+BOT_LOGITS = """
+- A list of the top ten tokens this pattern wants to SUPRESS."""
+GRAPH_PROMPT = """
+- The prompt which caused this feature to activate
+    - If the examples show this feature activating on many types of instances of a general concept, and the prompt indicates one of these instances to be relevant, simplify the explanation to something relevant to the prompt.
+    - For example, if the current examples include highlighted words like  "football, soccer, tennis, basketball" and the prompt has "michael jordan", then the explanation should be "basketball and other sports terms"
+"""
+
+PARENT_NODE_PROMPT = """
+- A list of explanations of features related to this feature.
+    - This relationship is quantified with a strength value and be should be considered accordingly.
+    - For example, if the current examples include highlighted words like "dog, building, tree, playground" and there is a connection to a feature called "pets" with strength 0.8, then this feature is probably detecting dogs.
+"""
 
 ### EXAMPLE 1 ###
 

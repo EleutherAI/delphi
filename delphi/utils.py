@@ -1,9 +1,7 @@
 from typing import Any, TypeVar, cast
 
-import datasets
 import numpy as np
 import torch
-from datasets.table import table_iter
 from torch import Tensor
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -48,15 +46,24 @@ def load_tokenized_data(
 
     tokens = tokens_ds["input_ids"]
 
-    if isinstance(tokens, datasets.Column):
-        tokens = torch.cat(
-            [
-                torch.from_numpy(np.stack(table_chunk["input_ids"].to_numpy(), axis=0))
-                for table_chunk in table_iter(
-                    tokens.source._data, convert_to_tensor_chunk_size
-                )
-            ]
-        )
+    try:
+        from datasets import Column
+
+        if isinstance(tokens, Column):
+            from datasets.table import table_iter
+
+            tokens = torch.cat(
+                [
+                    torch.from_numpy(
+                        np.stack(table_chunk["input_ids"].to_numpy(), axis=0)
+                    )
+                    for table_chunk in table_iter(
+                        tokens.source._data, convert_to_tensor_chunk_size
+                    )
+                ]
+            )
+    except ImportError:
+        assert len(tokens.shape) == 2
 
     return tokens
 
