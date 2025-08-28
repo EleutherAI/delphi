@@ -6,6 +6,9 @@ from .embedding.example_embedding import ExampleEmbeddingScorer
 from .scorer import Scorer
 from .simulator.oai_simulator import OpenAISimulator
 from .surprisal.surprisal import SurprisalScorer
+from .intervention.intervention_scorer import InterventionScorer
+from .intervention.logprob_intervention_scorer import LogProbInterventionScorer
+from .intervention.surprisal_intervention_scorer import SurprisalInterventionScorer
 
 __all__ = [
     "FuzzingScorer",
@@ -16,4 +19,8 @@ __all__ = [
     "EmbeddingScorer",
     "IntruderScorer",
     "ExampleEmbeddingScorer",
+    "SurprisalInterventionScorer",
+    "InterventionScorer",
+    "LogProbInterventionScorer",
+    
 ]
