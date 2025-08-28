@@ -14,7 +14,17 @@ def plot_firing_vs_f1(
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     for module, module_df in latent_df.groupby("module"):
+
+        if 'firing_count' not in module_df.columns:
+            print(f"WARNING: 'firing_count' column not found for module {module}. Skipping plot.")
+            continue
+
         module_df = module_df.copy()
+        # Filter out rows where f1_score is NaN to avoid errors in plotting
+        module_df = module_df[module_df['f1_score'].notna()]
+        if module_df.empty:
+            continue
+
         module_df["firing_rate"] = module_df["firing_count"] / num_tokens
         fig = px.scatter(module_df, x="firing_rate", y="f1_score", log_x=True)
         fig.update_layout(
@@ -26,30 +36,32 @@ def plot_firing_vs_f1(
 def import_plotly():
     """Import plotly with mitigiation for MathJax bug."""
     try:
-        import plotly.express as px  # type: ignore
-        import plotly.io as pio  # type: ignore
+        import plotly.express as px
+        import plotly.io as pio
     except ImportError:
         raise ImportError(
             "Plotly is not installed.\n"
             "Please install it using `pip install plotly`, "
             "or install the `[visualize]` extra."
         )
-    pio.kaleido.scope.mathjax = None  # https://github.com/plotly/plotly.py/issues/3469
+    pio.kaleido.scope.mathjax = None
     return px
 
 
 def compute_auc(df: pd.DataFrame) -> float | None:
-    if not df.probability.nunique():
-        return None
-
+    # Filter for rows where probability is not None and there's more than one unique value
     valid_df = df[df.probability.notna()]
-
-    return roc_auc_score(valid_df.activating, valid_df.probability)  # type: ignore
+    if valid_df.probability.nunique() <= 1:
+        return None
+    return roc_auc_score(valid_df.activating, valid_df.probability)
 
 
 def plot_accuracy_hist(df: pd.DataFrame, out_dir: Path):
     out_dir.mkdir(exist_ok=True, parents=True)
     for label in df["score_type"].unique():
+        # Filter out surprisal_intervention as 'accuracy' is not relevant for it
+        if label == 'surprisal_intervention':
+            continue
         fig = px.histogram(
             df[df["score_type"] == label],
             x="accuracy",
@@ -60,11 +72,10 @@ def plot_accuracy_hist(df: pd.DataFrame, out_dir: Path):
 
 
 def plot_roc_curve(df: pd.DataFrame, out_dir: Path):
-    if not df.probability.nunique():
-        return
-
-    # filter out NANs
+    # Filter for rows where probability is not None and there's more than one unique value
     valid_df = df[df.probability.notna()]
+    if valid_df.empty or valid_df.activating.nunique() <= 1 or valid_df.probability.nunique() <= 1:
+        return
 
     fpr, tpr, _ = roc_curve(valid_df.activating, valid_df.probability)
     auc = roc_auc_score(valid_df.activating, valid_df.probability)
@@ -85,67 +96,41 @@ def plot_roc_curve(df: pd.DataFrame, out_dir: Path):
 
 def compute_confusion(df: pd.DataFrame, threshold: float = 0.5) -> dict:
     df_valid = df[df["prediction"].notna()]
-    act = df_valid["activating"].astype(bool)
+    if df_valid.empty:
+        return dict(true_positives=0, true_negatives=0, false_positives=0, false_negatives=0,
+                    total_examples=0, total_positives=0, total_negatives=0, failed_count=len(df))
 
+    act = df_valid["activating"].astype(bool)
     total = len(df_valid)
     pos = act.sum()
     neg = total - pos
-
     tp = ((df_valid.prediction >= threshold) & act).sum()
     tn = ((df_valid.prediction < threshold) & ~act).sum()
     fp = ((df_valid.prediction >= threshold) & ~act).sum()
     fn = ((df_valid.prediction < threshold) & act).sum()
 
-    assert fp <= neg and tn <= neg and tp <= pos and fn <= pos
-
     return dict(
-        true_positives=tp,
-        true_negatives=tn,
-        false_positives=fp,
-        false_negatives=fn,
-        total_examples=total,
-        total_positives=pos,
-        total_negatives=neg,
-        failed_count=len(df_valid) - total,
+        true_positives=tp, true_negatives=tn, false_positives=fp, false_negatives=fn,
+        total_examples=total, total_positives=pos, total_negatives=neg,
+        failed_count=len(df) - len(df_valid),
     )
 
 
 def compute_classification_metrics(conf: dict) -> dict:
-    tp = conf["true_positives"]
-    tn = conf["true_negatives"]
-    fp = conf["false_positives"]
-    fn = conf["false_negatives"]
-    total = conf["total_examples"]
-    pos = conf["total_positives"]
-    neg = conf["total_negatives"]
-
-    assert pos + neg == total, "pos + neg must equal total"
-
-    # accuracy = (tp + tn) / total if total > 0 else 0
-    balanced_accuracy = (
-        (tp / pos if pos > 0 else 0) + (tn / neg if neg > 0 else 0)
-    ) / 2
-
+    tp, tn, fp, fn = conf["true_positives"], conf["true_negatives"], conf["false_positives"], conf["false_negatives"]
+    pos, neg = conf["total_positives"], conf["total_negatives"]
+    
+    balanced_accuracy = ((tp / pos if pos > 0 else 0) + (tn / neg if neg > 0 else 0)) / 2
     precision = tp / (tp + fp) if tp + fp > 0 else 0
     recall = tp / pos if pos > 0 else 0
-    f1 = (
-        2 * (precision * recall) / (precision + recall) if precision + recall > 0 else 0
-    )
+    f1 = 2 * (precision * recall) / (precision + recall) if precision + recall > 0 else 0
 
     return dict(
-        precision=precision,
-        recall=recall,
-        f1_score=f1,
-        accuracy=balanced_accuracy,
+        precision=precision, recall=recall, f1_score=f1, accuracy=balanced_accuracy,
         true_positive_rate=tp / pos if pos > 0 else 0,
         true_negative_rate=tn / neg if neg > 0 else 0,
         false_positive_rate=fp / neg if neg > 0 else 0,
         false_negative_rate=fn / pos if pos > 0 else 0,
-        total_examples=total,
-        total_positives=pos,
-        total_negatives=neg,
-        positive_class_ratio=pos / total if total > 0 else 0,
-        negative_class_ratio=neg / total if total > 0 else 0,
     )
 
 
@@ -153,27 +138,32 @@ def load_data(scores_path: Path, modules: list[str]):
     """Load all on-disk data into a single DataFrame."""
 
     def parse_score_file(path: Path) -> pd.DataFrame:
-        """
-        Load a score file and return a raw DataFrame
-        """
         try:
             data = orjson.loads(path.read_bytes())
         except orjson.JSONDecodeError:
             print(f"Error decoding JSON from {path}. Skipping file.")
             return pd.DataFrame()
+        
+        if not isinstance(data, list):
+            print(f"Warning: Expected a list of results in {path}, but found {type(data)}. Skipping file.")
+            return pd.DataFrame()
 
         latent_idx = int(path.stem.split("latent")[-1])
 
+        # --- MODIFICATION 1: PARSE THE NEW METRICS ---
+        # Updated to extract all possible keys safely using .get()
         return pd.DataFrame(
             [
                 {
-                    "text": "".join(ex["str_tokens"]),
-                    "distance": ex["distance"],
-                    "activating": ex["activating"],
-                    "prediction": ex["prediction"],
-                    "probability": ex["probability"],
-                    "correct": ex["correct"],
-                    "activations": ex["activations"],
+                    "text": "".join(ex.get("str_tokens", [])),
+                    "distance": ex.get("distance"),
+                    "activating": ex.get("activating"),
+                    "prediction": ex.get("prediction"),
+                    "probability": ex.get("probability"),
+                    "correct": ex.get("correct"),
+                    "activations": ex.get("activations"),
+                    "final_score": ex.get("final_score"),
+                    "avg_kl_divergence": ex.get("avg_kl_divergence"),
                     "latent_idx": latent_idx,
                 }
                 for ex in data
@@ -187,68 +177,30 @@ def load_data(scores_path: Path, modules: list[str]):
         print(f"Missing modules: {[m for m in modules if m not in counts]}")
         counts = None
 
-    # Collect per-latent data
     latent_dfs = []
     for score_type_dir in scores_path.iterdir():
         if not score_type_dir.is_dir():
             continue
         for module in modules:
             for file in score_type_dir.glob(f"*{module}*"):
-                latent_idx = int(file.stem.split("latent")[-1])
-
                 latent_df = parse_score_file(file)
+                if latent_df.empty:
+                    continue
                 latent_df["score_type"] = score_type_dir.name
                 latent_df["module"] = module
-                latent_df["latent_idx"] = latent_idx
                 if counts:
+                    latent_idx = latent_df["latent_idx"].iloc[0]
                     latent_df["firing_count"] = (
                         counts[module][latent_idx].item()
-                        if latent_idx in counts[module]
+                        if module in counts and latent_idx in counts[module]
                         else None
                     )
-
                 latent_dfs.append(latent_df)
 
+    if not latent_dfs:
+        return pd.DataFrame(), counts
+        
     return pd.concat(latent_dfs, ignore_index=True), counts
-
-
-def frequency_weighted_f1(
-    df: pd.DataFrame, counts: dict[str, torch.Tensor]
-) -> float | None:
-    rows = []
-    for (module, latent_idx), grp in df.groupby(["module", "latent_idx"]):
-        f1 = compute_classification_metrics(compute_confusion(grp))["f1_score"]
-        fire = counts[module][latent_idx].item()
-        rows.append(
-            {
-                "module": module,
-                "latent_idx": latent_idx,
-                "f1_score": f1,
-                "firing_count": fire,
-            }
-        )
-
-    latent_df = pd.DataFrame(rows)
-
-    per_module_f1 = []
-    for module in latent_df["module"].unique():
-        module_df = latent_df[latent_df["module"] == module]
-
-        firing_weights = counts[module][module_df["latent_idx"]].float()
-        total_weight = firing_weights.sum()
-        if total_weight == 0:
-            continue
-
-        f1_tensor = torch.as_tensor(module_df["f1_score"].values, dtype=torch.float32)
-        module_f1 = (f1_tensor * firing_weights).sum() / firing_weights.sum()
-        per_module_f1.append(module_f1)
-
-    overall_frequency_weighted_f1 = torch.stack(per_module_f1).mean()
-    return (
-        overall_frequency_weighted_f1.item()
-        if not overall_frequency_weighted_f1.isnan()
-        else None
-    )
 
 
 def get_agg_metrics(
@@ -256,32 +208,22 @@ def get_agg_metrics(
 ) -> pd.DataFrame:
     processed_rows = []
     for score_type, group_df in latent_df.groupby("score_type"):
+        # For surprisal_intervention, we don't compute classification metrics
+        if score_type == 'surprisal_intervention':
+            continue
+            
         conf = compute_confusion(group_df)
         class_m = compute_classification_metrics(conf)
         auc = compute_auc(group_df)
         f1_w = frequency_weighted_f1(group_df, counts) if counts else None
-
+        
         row = {
             "score_type": score_type,
-            **conf,
-            **class_m,
-            "auc": auc,
-            "weighted_f1": f1_w,
+            **conf, **class_m, "auc": auc, "weighted_f1": f1_w
         }
         processed_rows.append(row)
 
     return pd.DataFrame(processed_rows)
-
-
-def add_latent_f1(latent_df: pd.DataFrame) -> pd.DataFrame:
-    f1s = (
-        latent_df.groupby(["module", "latent_idx"])
-        .apply(
-            lambda g: compute_classification_metrics(compute_confusion(g))["f1_score"]
-        )
-        .reset_index(name="f1_score")  # <- naive (un-weighted) F1
-    )
-    return latent_df.merge(f1s, on=["module", "latent_idx"])
 
 
 def log_results(
@@ -290,94 +232,58 @@ def log_results(
     import_plotly()
 
     latent_df, counts = load_data(scores_path, modules)
-    latent_df = latent_df[latent_df["score_type"].isin(scorer_names)]
-    latent_df = add_latent_f1(latent_df)
-
-    plot_firing_vs_f1(
-        latent_df, num_tokens=10_000_000, out_dir=viz_path, run_label=scores_path.name
-    )
-
     if latent_df.empty:
-        print("No data found")
+        print("No data to analyze.")
         return
+        
+    latent_df = latent_df[latent_df["score_type"].isin(scorer_names)]
+    
+    # Separate the dataframes for different processing
+    classification_df = latent_df[latent_df['score_type'] != 'surprisal_intervention']
+    surprisal_df = latent_df[latent_df['score_type'] == 'surprisal_intervention']
 
-    dead = sum((counts[m] == 0).sum().item() for m in modules)
-    print(f"Number of dead features: {dead}")
-    print(f"Number of interpreted live features: {len(latent_df)}")
+    if not classification_df.empty:
+        classification_df = add_latent_f1(classification_df)
+        if counts:
+            plot_firing_vs_f1(classification_df, num_tokens=10_000_000, out_dir=viz_path, run_label=scores_path.name)
+        plot_roc_curve(classification_df, viz_path)
+        processed_df = get_agg_metrics(classification_df, counts)
+        plot_accuracy_hist(processed_df, viz_path)
 
-    # Load constructor config for run
-    with open(scores_path.parent / "run_config.json", "r") as f:
-        run_cfg = orjson.loads(f.read())
-    constructor_cfg = run_cfg.get("constructor_cfg", {})
-    min_examples = constructor_cfg.get("min_examples", None)
-    print("min examples", min_examples)
+    if counts:
+        dead = sum((counts[m] == 0).sum().item() for m in modules)
+        print(f"Number of dead features: {dead}")
+    
+    # --- MODIFICATION 2: ADD CONDITIONAL REPORTING ---
+    # Loop through all scorer types found in the data
+    for score_type in latent_df["score_type"].unique():
+        
+        # Handle the new scorer with its specific metrics
+        if score_type == 'surprisal_intervention':
+            # Drop duplicates since score is per-latent, not per-example
+            unique_latents = surprisal_df.drop_duplicates(subset=['module', 'latent_idx'])
+            avg_score = unique_latents['final_score'].mean()
+            avg_kl = unique_latents['avg_kl_divergence'].mean()
+            
+            print(f"\n--- {score_type.title()} Metrics ---")
+            print(f"Average Normalized Score: {avg_score:.3f}")
+            print(f"Average KL Divergence: {avg_kl:.3f}")
 
-    if min_examples is not None:
-        uninterpretable_features = sum(
-            [(counts[m] < min_examples).sum() for m in modules]
-        )
-        print(
-            f"Number of features below the interpretation firing"
-            f" count threshold: {uninterpretable_features}"
-        )
-
-    plot_roc_curve(latent_df, viz_path)
-
-    processed_df = get_agg_metrics(latent_df, counts)
-
-    plot_accuracy_hist(processed_df, viz_path)
-
-    for score_type in processed_df.score_type.unique():
-        score_type_summary = processed_df[processed_df.score_type == score_type].iloc[0]
-        print(f"\n--- {score_type.title()} Metrics ---")
-        print(f"Class-Balanced Accuracy: {score_type_summary['accuracy']:.3f}")
-        print(f"F1 Score: {score_type_summary['f1_score']:.3f}")
-        print(f"Frequency-Weighted F1 Score: {score_type_summary['weighted_f1']:.3f}")
-        print(
-            "Note: the frequency-weighted F1 score is computed over each"
-            " hookpoint and averaged"
-        )
-        print(f"Precision: {score_type_summary['precision']:.3f}")
-        print(f"Recall: {score_type_summary['recall']:.3f}")
-        # Only print AUC if unbalanced AUC is not -1.
-        if score_type_summary["auc"] is not None:
-            print(f"AUC: {score_type_summary['auc']:.3f}")
+        # Handle all other scorers with the original classification metrics
         else:
-            print("Logits not available.")
+            if not classification_df.empty:
+                score_type_summary = processed_df[processed_df.score_type == score_type].iloc[0]
+                print(f"\n--- {score_type.title()} Metrics ---")
+                print(f"Class-Balanced Accuracy: {score_type_summary['accuracy']:.3f}")
+                print(f"F1 Score: {score_type_summary['f1_score']:.3f}")
 
-        fractions_failed = [
-            score_type_summary["failed_count"]
-            / (
-                (
-                    score_type_summary["total_examples"]
-                    + score_type_summary["failed_count"]
-                )
-            )
-        ]
-        print(
-            f"""Average fraction of failed examples: \
-{sum(fractions_failed) / len(fractions_failed)}"""
-        )
-
-        print("\nConfusion Matrix:")
-        print(
-            f"True Positive Rate:  {score_type_summary['true_positive_rate']:.3f} "
-            f"({score_type_summary['true_positives'].sum()})"
-        )
-        print(
-            f"True Negative Rate:  {score_type_summary['true_negative_rate']:.3f} "
-            f"({score_type_summary['true_negatives'].sum()})"
-        )
-        print(
-            f"False Positive Rate: {score_type_summary['false_positive_rate']:.3f} "
-            f"({score_type_summary['false_positives'].sum()})"
-        )
-        print(
-            f"False Negative Rate: {score_type_summary['false_negative_rate']:.3f} "
-            f"({score_type_summary['false_negatives'].sum()})"
-        )
-
-        print("\nClass Distribution:")
-        print(f"""Positives: {score_type_summary['total_positives'].sum():.0f}""")
-        print(f"""Negatives: {score_type_summary['total_negatives'].sum():.0f}""")
-        print(f"Total: {score_type_summary['total_examples'].sum():.0f}")
+                if counts and score_type_summary['weighted_f1'] is not None:
+                    print(f"Frequency-Weighted F1 Score: {score_type_summary['weighted_f1']:.3f}")
+                
+                print(f"Precision: {score_type_summary['precision']:.3f}")
+                print(f"Recall: {score_type_summary['recall']:.3f}")
+                
+                if score_type_summary["auc"] is not None:
+                    print(f"AUC: {score_type_summary['auc']:.3f}")
+                else:
+                    print("AUC not available.")
