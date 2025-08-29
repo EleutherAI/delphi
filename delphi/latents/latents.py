@@ -158,6 +158,13 @@ class LatentRecord:
     number of contexts."""
 
     @property
+    def feature_id(self) -> int:
+        """
+        Returns the unique feature index for this latent.
+        """
+        return self.latent.latent_index
+
+    @property
     def max_activation(self) -> float:
         """
         Get the maximum activation value for the latent.
