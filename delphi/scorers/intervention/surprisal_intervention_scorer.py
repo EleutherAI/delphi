@@ -139,7 +139,9 @@ class SurprisalInterventionScorer(Scorer):
         try:
             return self._find_layer(model, full_path)
         except AttributeError as e:
-            raise AttributeError(f"Could not resolve path '{full_path}'. Model structure might be unexpected. Original error: {e}")
+            raise AttributeError(f"""Could not resolve path '{full_path}'. 
+                                     Model structure might be unexpected. 
+                                     Original error: {e}""")
 
 
     def _sanitize_examples(self, examples: List[Any]) -> List[Dict[str, Any]]:

@@ -16,8 +16,8 @@ def plot_firing_vs_f1(
     for module, module_df in latent_df.groupby("module"):
 
         if 'firing_count' not in module_df.columns:
-            print(f"WARNING: 'firing_count' column not found for module {module}. 
-                    Skipping plot.")
+            print(f"""WARNING: 'firing_count' column not found for module {module}. 
+                      Skipping plot.""")
             continue
 
         module_df = module_df.copy()
@@ -175,8 +175,9 @@ def load_data(scores_path: Path, modules: list[str]):
             return pd.DataFrame()
 
         if not isinstance(data, list):
-            print(f"""Warning: Expected a list of results in {path}, but found {type(data)}. 
-                    Skipping file.""")
+            print(f"""Warning: Expected a list of results in {path}, 
+                      but found {type(data)}. 
+                      Skipping file.""")
             return pd.DataFrame()
 
         latent_idx = int(path.stem.split("latent")[-1])
