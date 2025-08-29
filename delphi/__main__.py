@@ -30,7 +30,7 @@ from delphi.latents import LatentCache, LatentDataset
 from delphi.latents.neighbours import NeighbourCalculator
 from delphi.log.result_analysis import log_results
 from delphi.pipeline import Pipe, Pipeline, process_wrapper
-from delphi.scorers import DetectionScorer, FuzzingScorer, OpenAISimulator, InterventionScorer, LogProbInterventionScorer, SurprisalInterventionScorer
+from delphi.scorers import DetectionScorer, FuzzingScorer, OpenAISimulator, SurprisalInterventionScorer
 from delphi.sparse_coders import load_hooks_sparse_coders, load_sparse_coders
 from delphi.utils import assert_type, load_tokenized_data
 
@@ -252,8 +252,6 @@ async def process_cache(
         safe_latent_name = str(result.record.latent).replace("/", "--")
 
         with open(score_dir / f"{safe_latent_name}.txt", "wb") as f:
-            # This line now works universally. For other scorers, it saves their simple
-            # score. For surprisal_intervention, it saves the rich 'final_payload'.
             f.write(orjson.dumps(result.score, default=custom_serializer))
 
         
@@ -278,20 +276,7 @@ async def process_cache(
                 verbose=run_cfg.verbose,
                 log_prob=run_cfg.log_probs,
             )
-        elif scorer_name == "intervention":
-            scorer = InterventionScorer(
-                llm_client,
-                n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
-                verbose=run_cfg.verbose,
-                log_prob=run_cfg.log_probs,
-            )
-        elif scorer_name == "logprob_intervention":
-            scorer = LogProbInterventionScorer(
-                llm_client,
-                n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
-                verbose=run_cfg.verbose,
-                log_prob=run_cfg.log_probs,
-            )
+
         elif scorer_name == "surprisal_intervention":
             scorer = SurprisalInterventionScorer(
                 model,

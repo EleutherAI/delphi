@@ -150,7 +150,6 @@ def load_data(scores_path: Path, modules: list[str]):
 
         latent_idx = int(path.stem.split("latent")[-1])
 
-        # --- MODIFICATION 1: PARSE THE NEW METRICS ---
         # Updated to extract all possible keys safely using .get()
         return pd.DataFrame(
             [
@@ -254,11 +253,9 @@ def log_results(
         dead = sum((counts[m] == 0).sum().item() for m in modules)
         print(f"Number of dead features: {dead}")
     
-    # --- MODIFICATION 2: ADD CONDITIONAL REPORTING ---
-    # Loop through all scorer types found in the data
+
     for score_type in latent_df["score_type"].unique():
         
-        # Handle the new scorer with its specific metrics
         if score_type == 'surprisal_intervention':
             # Drop duplicates since score is per-latent, not per-example
             unique_latents = surprisal_df.drop_duplicates(subset=['module', 'latent_idx'])
@@ -269,7 +266,6 @@ def log_results(
             print(f"Average Normalized Score: {avg_score:.3f}")
             print(f"Average KL Divergence: {avg_kl:.3f}")
 
-        # Handle all other scorers with the original classification metrics
         else:
             if not classification_df.empty:
                 score_type_summary = processed_df[processed_df.score_type == score_type].iloc[0]

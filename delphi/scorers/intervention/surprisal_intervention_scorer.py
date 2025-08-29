@@ -1,4 +1,3 @@
-# surprisal_intervention_scorer.py
 import functools
 import random
 import copy
@@ -9,8 +8,6 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer
 
-# Assuming 'delphi' is your project structure.
-# If not, you may need to adjust these relative imports.
 from ..scorer import Scorer, ScorerResult
 from ...latents import LatentRecord, ActivatingExample
 
@@ -75,11 +72,9 @@ class SurprisalInterventionScorer(Scorer):
         if len(self.hookpoints):
             self.hookpoint_str = self.hookpoints[0]
 
-        # Ensure tokenizer is available
         if hasattr(subject_model, "tokenizer"):
             self.tokenizer = subject_model.tokenizer
         else:
-            # Fallback to a standard tokenizer if not attached to the model
             self.tokenizer = AutoTokenizer.from_pretrained("gpt2")
         
         if self.tokenizer.pad_token is None:
@@ -113,7 +108,6 @@ class SurprisalInterventionScorer(Scorer):
         """
         parts = hookpoint_str.split('.')
         
-        # 1. Validate the string format.
         is_valid_format = (
             len(parts) == 3 and
             parts[0] in ['layers', 'h'] and
@@ -122,129 +116,68 @@ class SurprisalInterventionScorer(Scorer):
         )
 
         if not is_valid_format:
-            # Fallback for simple block types at the top level, e.g. 'embed_in'
             if len(parts) == 1 and hasattr(model, hookpoint_str):
                  return getattr(model, hookpoint_str)
             raise ValueError(f"Hookpoint string '{hookpoint_str}' is not in a recognized format like 'layers.6.mlp'.")
-        # --- End of changes ---
 
-        # 2. Heuristically find the model prefix.
+        #Heuristically find the model prefix.
         prefix = None
         for p in ["gpt_neox", "transformer", "model"]:
             if hasattr(model, p):
                 candidate_body = getattr(model, p)
-                # Use parts[0] to get the layer block name ('layers' or 'h')
                 if hasattr(candidate_body, parts[0]):
                     prefix = p
                     break
         
         full_path = f"{prefix}.{hookpoint_str}" if prefix else hookpoint_str
 
-        # 3. Use the simple path finder to get the module.
         try:
             return self._find_layer(model, full_path)
         except AttributeError as e:
             raise AttributeError(f"Could not resolve path '{full_path}'. Model structure might be unexpected. Original error: {e}")
 
-        
-
-
-    # def _sanitize_examples(self, examples: List[Any]) -> List[Dict[str, Any]]:
-    #     """Ensures examples are in a consistent format: a list of dictionaries with 'str_tokens'."""
-    #     sanitized = []
-    #     for ex in examples:
-    #         if isinstance(ex, dict) and "str_tokens" in ex:
-    #             sanitized.append(ex)
-    #         elif hasattr(ex, "str_tokens"):
-    #             sanitized.append({"str_tokens": [str(t) for t in ex.str_tokens]})
-    #         elif isinstance(ex, str):
-    #             sanitized.append({"str_tokens": [ex]})
-    #         elif isinstance(ex, (list, tuple)):
-    #             sanitized.append({"str_tokens": [str(t) for t in ex]})
-    #         else:
-    #             sanitized.append({"str_tokens": [str(ex)]})
-    #     return sanitized
-
 
     def _sanitize_examples(self, examples: List[Any]) -> List[Dict[str, Any]]:
+        """
+        Function used for formatting results to run smoothly in the delphi pipeline
+        """
         sanitized = []
         for ex in examples:
-            # --- NEW, MORE ROBUST LOGIC ---
-            # 1. Prioritize handling objects that have the data we need (like ActivatingExample)
             if hasattr(ex, 'str_tokens') and ex.str_tokens is not None:
-                # This correctly handles ActivatingExample objects and similar structures.
-                # It extracts the string tokens instead of converting the whole object to a string.
                 sanitized.append({'str_tokens': ex.str_tokens})
             
-            # 2. Handle cases where the item is already a correct dictionary
             elif isinstance(ex, dict) and "str_tokens" in ex:
                 sanitized.append(ex)
             
-            # 3. Handle plain strings
             elif isinstance(ex, str):
                 sanitized.append({"str_tokens": [ex]})
             
-            # 4. Handle lists/tuples of strings as a fallback
             elif isinstance(ex, (list, tuple)):
                 sanitized.append({"str_tokens": [str(t) for t in ex]})
             
-            # 5. Handle any other unexpected type as a last resort
             else:
                 sanitized.append({"str_tokens": [str(ex)]})
                 
         return sanitized
 
 
-    # def _sanitize_examples(self, examples: List[Any]) -> List[Dict[str, Any]]:
-        
-    #     sanitized = []
-    #     for i, ex in enumerate(examples):
-            
-
-    #         if isinstance(ex, dict) and "str_tokens" in ex:
-    #             sanitized.append(ex)
-                
-            
-    #         elif isinstance(ex, str):
-    #             # This is the key conversion
-    #             converted_ex = {"str_tokens": [ex]}
-    #             sanitized.append(converted_ex)
-                
-
-    #         elif isinstance(ex, (list, tuple)):
-    #             converted_ex = {"str_tokens": [str(t) for t in ex]}
-    #             sanitized.append(converted_ex)
-                
-    #         else:
-    #             converted_ex = {"str_tokens": [str(ex)]}
-    #             sanitized.append(converted_ex)
-                
-    #     print("fin this")
-    #     return sanitized
 
     async def __call__(self, record: LatentRecord) -> ScorerResult:
-        # --- MODIFICATION START ---
-        # 1. Create a deep copy to work on, ensuring we don't interfere
-        #    with other parts of the pipeline that might use the original record.
+
         record_copy = copy.deepcopy(record)
 
-        # 2. Read the raw examples from our copy.
         raw_examples = getattr(record_copy, "test", []) or []
         
         if not raw_examples:
             result = SurprisalInterventionResult(score=0.0, avg_kl=0.0, explanation=record_copy.explanation)
-            # Return the result with the original record since no changes were made.
             return ScorerResult(record=record, score=result)
 
-        # 3. Sanitize the examples.
         examples = self._sanitize_examples(raw_examples)
         
-        # 4. Overwrite the attributes on the copy with the clean data.
         record_copy.test = examples
         record_copy.examples = examples
         record_copy.train = examples
         
-        # Now, use the sanitized 'examples' and the 'record_copy' for all subsequent operations.
         prompts = ["".join(ex["str_tokens"]) for ex in examples[:self.num_prompts]]
         
         total_diff = 0.0
@@ -252,7 +185,6 @@ class SurprisalInterventionScorer(Scorer):
         n = 0
 
         for prompt in prompts:
-            # Pass the clean record_copy to the generation methods.
             clean_text, clean_logp_dist = await self._generate_with_and_without_intervention(prompt, record_copy, intervene=False)
             int_text, int_logp_dist = await self._generate_with_and_without_intervention(prompt, record_copy, intervene=True)
             
@@ -274,7 +206,6 @@ class SurprisalInterventionScorer(Scorer):
         for ex in examples[:self.num_prompts]:
             final_output_list.append({
                 "str_tokens": ex["str_tokens"],
-                # Add the final scores. These will be duplicated for each example.
                 "final_score": final_score,
                 "avg_kl_divergence": avg_kl,
                 # Add placeholder keys that the parser expects, with default values.
@@ -312,14 +243,12 @@ class SurprisalInterventionScorer(Scorer):
             if hookpoint_str is None:
                 raise ValueError("No hookpoint string specified for intervention.")
 
-            # Resolve the string into the actual layer module.
             layer_to_hook = self._resolve_hookpoint(self.subject_model, hookpoint_str)
 
             direction = self._get_intervention_direction(record).to(device)
             direction = direction.unsqueeze(0).unsqueeze(0)  # Shape for broadcasting: [1, 1, D]
 
             def hook_fn(module, inp, out):
-                # Gracefully handle both tuple and tensor outputs
                 hidden_states = out[0] if isinstance(out, tuple) else out
                 
                 # Apply intervention to the last token's hidden state
@@ -423,7 +352,6 @@ class SurprisalInterventionScorer(Scorer):
         def capture_hook(module, inp, out):
             hidden_states = out[0] if isinstance(out, tuple) else out
             
-            # Now, hidden_states is guaranteed to be the 3D activation tensor
             captured_activations.append(hidden_states[:, -1, :].detach().cpu())
 
         hookpoint_str = self.hookpoint_str or getattr(record, "hookpoint", None)

@@ -152,8 +152,6 @@ class RunConfig(Serializable):
             "fuzz",
             "detection",
             "simulation",
-            "intervention",
-            "logprob_intervention",
             "surprisal_intervention"
         ],
         default=[
@@ -162,7 +160,7 @@ class RunConfig(Serializable):
         ],
     )
     """Scorer methods to score latent explanations. Options are 'fuzz', 'detection',
-    'simulation' and 'intervention'."""
+    'simulation' and 'surprisal_intervention'."""
 
     name: str = ""
     """The name of the run. Results are saved in a directory with this name."""
