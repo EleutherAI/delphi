@@ -16,7 +16,7 @@ def plot_firing_vs_f1(
     for module, module_df in latent_df.groupby("module"):
 
         if 'firing_count' not in module_df.columns:
-            print(f"""WARNING: 'firing_count' column not found for module {module}. 
+            print(f"""WARNING:'firing_count' column not found for module {module}. 
                     Skipping plot.""")
             continue
 

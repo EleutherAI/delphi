@@ -18,7 +18,8 @@ class SurprisalInterventionResult:
 
     Attributes:
         score: The final computed score.
-        avg_kl: The average KL-D between clean & intervened next-token distributions.
+        avg_kl: The average KL divergence between clean & intervened 
+                next-token distributions.
         explanation: The explanation string that was scored.
     """
     score: float
