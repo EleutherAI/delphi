@@ -328,9 +328,9 @@ def log_results(
                 print(f"F1 Score: {score_type_summary['f1_score']:.3f}")
 
                 if counts and score_type_summary['weighted_f1'] is not None:
-                    print(f"""Frequency-Weighted F1 Score: 
+                    print(f"""Frequency-Weighted F1 Score:
                             {score_type_summary['weighted_f1']:.3f}""")
-                
+
                 print(f"Precision: {score_type_summary['precision']:.3f}")
                 print(f"Recall: {score_type_summary['recall']:.3f}")
 
