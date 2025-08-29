@@ -148,12 +148,7 @@ class RunConfig(Serializable):
     the default single token explainer, and 'none' for no explanation generation."""
 
     scorers: list[str] = list_field(
-        choices=[
-            "fuzz",
-            "detection",
-            "simulation",
-            "surprisal_intervention"
-        ],
+        choices=["fuzz", "detection", "simulation", "surprisal_intervention"],
         default=[
             "fuzz",
             "detection",

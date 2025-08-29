@@ -5,14 +5,11 @@ from functools import partial
 from pathlib import Path
 from typing import Callable
 
-from dataclasses import asdict
-
 import orjson
 import torch
 from simple_parsing import ArgumentParser
 from torch import Tensor
 from transformers import (
-    AutoModel,
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
@@ -30,7 +27,12 @@ from delphi.latents import LatentCache, LatentDataset
 from delphi.latents.neighbours import NeighbourCalculator
 from delphi.log.result_analysis import log_results
 from delphi.pipeline import Pipe, Pipeline, process_wrapper
-from delphi.scorers import DetectionScorer, FuzzingScorer, OpenAISimulator, SurprisalInterventionScorer
+from delphi.scorers import (
+    DetectionScorer,
+    FuzzingScorer,
+    OpenAISimulator,
+    SurprisalInterventionScorer,
+)
 from delphi.sparse_coders import load_hooks_sparse_coders, load_sparse_coders
 from delphi.utils import assert_type, load_tokenized_data
 
@@ -122,7 +124,7 @@ async def process_cache(
     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
     latent_range: Tensor | None,
     model,
-    hookpoint_to_sparse_encode
+    hookpoint_to_sparse_encode,
 ):
     """
     Converts SAE latent activations in on-disk cache in the `latents_path` directory
@@ -223,7 +225,7 @@ async def process_cache(
                 postprocess=none_postprocessor,
             )
         )
-    
+
     def custom_serializer(obj):
         """A custom serializer for orjson to handle specific types."""
         if isinstance(obj, Tensor):
@@ -254,7 +256,6 @@ async def process_cache(
         with open(score_dir / f"{safe_latent_name}.txt", "wb") as f:
             f.write(orjson.dumps(result.score, default=custom_serializer))
 
-        
     scorers = []
     for scorer_name in run_cfg.scorers:
         scorer_path = scores_path / scorer_name
@@ -281,7 +282,7 @@ async def process_cache(
             scorer = SurprisalInterventionScorer(
                 model,
                 hookpoint_to_sparse_encode,
-                hookpoints = run_cfg.hookpoints,
+                hookpoints=run_cfg.hookpoints,
                 n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
                 verbose=run_cfg.verbose,
                 log_prob=run_cfg.log_probs,
@@ -476,7 +477,7 @@ async def run(
             tokenizer,
             latent_range,
             model,
-            hookpoint_to_sparse_encode
+            hookpoint_to_sparse_encode,
         )
 
     del model, hookpoint_to_sparse_encode

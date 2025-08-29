@@ -1,15 +1,14 @@
-import functools
-import random
 import copy
 from dataclasses import dataclass
-from typing import Any, List, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer
 
+from ...latents import LatentRecord
 from ..scorer import Scorer, ScorerResult
-from ...latents import LatentRecord, ActivatingExample
+
 
 @dataclass
 class SurprisalInterventionResult:
@@ -21,6 +20,7 @@ class SurprisalInterventionResult:
         avg_kl: The average KL divergence between the clean and intervened next-token distributions.
         explanation: The explanation string that was scored.
     """
+
     score: float
     avg_kl: float
     explanation: str
@@ -49,6 +49,7 @@ class SurprisalInterventionScorer(Scorer):
       4. The final score is the mean change in explanation log-prob, divided by the mean KL divergence:
          score = mean(log_prob_intervened - log_prob_clean) / (mean_KL + ε)[cite: 209].
     """
+
     name = "surprisal_intervention"
 
     def __init__(self, subject_model: Any, explainer_model: Any = None, **kwargs):
@@ -76,7 +77,7 @@ class SurprisalInterventionScorer(Scorer):
             self.tokenizer = subject_model.tokenizer
         else:
             self.tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        
+
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.subject_model.config.pad_token_id = self.tokenizer.eos_token_id
@@ -99,28 +100,30 @@ class SurprisalInterventionScorer(Scorer):
             else:
                 current = getattr(current, part)
         return current
-    
+
     def _resolve_hookpoint(self, model: Any, hookpoint_str: str) -> Any:
         """
         Dynamically finds the correct model prefix and resolves the full hookpoint path.
-        
+
         This makes the scorer agnostic to different transformer architectures.
         """
-        parts = hookpoint_str.split('.')
-        
+        parts = hookpoint_str.split(".")
+
         is_valid_format = (
-            len(parts) == 3 and
-            parts[0] in ['layers', 'h'] and
-            parts[1].isdigit() and
-            parts[2] in ['mlp', 'attention', 'attn']
+            len(parts) == 3
+            and parts[0] in ["layers", "h"]
+            and parts[1].isdigit()
+            and parts[2] in ["mlp", "attention", "attn"]
         )
 
         if not is_valid_format:
             if len(parts) == 1 and hasattr(model, hookpoint_str):
-                 return getattr(model, hookpoint_str)
-            raise ValueError(f"Hookpoint string '{hookpoint_str}' is not in a recognized format like 'layers.6.mlp'.")
+                return getattr(model, hookpoint_str)
+            raise ValueError(
+                f"Hookpoint string '{hookpoint_str}' is not in a recognized format like 'layers.6.mlp'."
+            )
 
-        #Heuristically find the model prefix.
+        # Heuristically find the model prefix.
         prefix = None
         for p in ["gpt_neox", "transformer", "model"]:
             if hasattr(model, p):
@@ -128,14 +131,15 @@ class SurprisalInterventionScorer(Scorer):
                 if hasattr(candidate_body, parts[0]):
                     prefix = p
                     break
-        
+
         full_path = f"{prefix}.{hookpoint_str}" if prefix else hookpoint_str
 
         try:
             return self._find_layer(model, full_path)
         except AttributeError as e:
-            raise AttributeError(f"Could not resolve path '{full_path}'. Model structure might be unexpected. Original error: {e}")
-
+            raise AttributeError(
+                f"Could not resolve path '{full_path}'. Model structure might be unexpected. Original error: {e}"
+            )
 
     def _sanitize_examples(self, examples: List[Any]) -> List[Dict[str, Any]]:
         """
@@ -143,57 +147,69 @@ class SurprisalInterventionScorer(Scorer):
         """
         sanitized = []
         for ex in examples:
-            if hasattr(ex, 'str_tokens') and ex.str_tokens is not None:
-                sanitized.append({'str_tokens': ex.str_tokens})
-            
+            if hasattr(ex, "str_tokens") and ex.str_tokens is not None:
+                sanitized.append({"str_tokens": ex.str_tokens})
+
             elif isinstance(ex, dict) and "str_tokens" in ex:
                 sanitized.append(ex)
-            
+
             elif isinstance(ex, str):
                 sanitized.append({"str_tokens": [ex]})
-            
+
             elif isinstance(ex, (list, tuple)):
                 sanitized.append({"str_tokens": [str(t) for t in ex]})
-            
+
             else:
                 sanitized.append({"str_tokens": [str(ex)]})
-                
+
         return sanitized
-
-
 
     async def __call__(self, record: LatentRecord) -> ScorerResult:
 
         record_copy = copy.deepcopy(record)
 
         raw_examples = getattr(record_copy, "test", []) or []
-        
+
         if not raw_examples:
-            result = SurprisalInterventionResult(score=0.0, avg_kl=0.0, explanation=record_copy.explanation)
+            result = SurprisalInterventionResult(
+                score=0.0, avg_kl=0.0, explanation=record_copy.explanation
+            )
             return ScorerResult(record=record, score=result)
 
         examples = self._sanitize_examples(raw_examples)
-        
+
         record_copy.test = examples
         record_copy.examples = examples
         record_copy.train = examples
-        
-        prompts = ["".join(ex["str_tokens"]) for ex in examples[:self.num_prompts]]
-        
+
+        prompts = ["".join(ex["str_tokens"]) for ex in examples[: self.num_prompts]]
+
         total_diff = 0.0
         total_kl = 0.0
         n = 0
 
         for prompt in prompts:
-            clean_text, clean_logp_dist = await self._generate_with_and_without_intervention(prompt, record_copy, intervene=False)
-            int_text, int_logp_dist = await self._generate_with_and_without_intervention(prompt, record_copy, intervene=True)
-            
-            logp_clean = await self._score_explanation(clean_text, record_copy.explanation)
+            clean_text, clean_logp_dist = (
+                await self._generate_with_and_without_intervention(
+                    prompt, record_copy, intervene=False
+                )
+            )
+            int_text, int_logp_dist = (
+                await self._generate_with_and_without_intervention(
+                    prompt, record_copy, intervene=True
+                )
+            )
+
+            logp_clean = await self._score_explanation(
+                clean_text, record_copy.explanation
+            )
             logp_int = await self._score_explanation(int_text, record_copy.explanation)
-            
+
             p_clean = torch.exp(clean_logp_dist)
-            kl_div = F.kl_div(int_logp_dist, p_clean, reduction='sum', log_target=False).item()
-            
+            kl_div = F.kl_div(
+                int_logp_dist, p_clean, reduction="sum", log_target=False
+            ).item()
+
             total_diff += logp_int - logp_clean
             total_kl += kl_div
             n += 1
@@ -203,19 +219,21 @@ class SurprisalInterventionScorer(Scorer):
         final_score = avg_diff / (avg_kl + 1e-9) if n > 0 else 0.0
 
         final_output_list = []
-        for ex in examples[:self.num_prompts]:
-            final_output_list.append({
-                "str_tokens": ex["str_tokens"],
-                "final_score": final_score,
-                "avg_kl_divergence": avg_kl,
-                # Add placeholder keys that the parser expects, with default values.
-                "distance": None,
-                "activating": None,
-                "prediction": None,
-                "correct": None,
-                "probability": None,
-                "activations": None,
-            })
+        for ex in examples[: self.num_prompts]:
+            final_output_list.append(
+                {
+                    "str_tokens": ex["str_tokens"],
+                    "final_score": final_score,
+                    "avg_kl_divergence": avg_kl,
+                    # Add placeholder keys that the parser expects, with default values.
+                    "distance": None,
+                    "activating": None,
+                    "prediction": None,
+                    "correct": None,
+                    "probability": None,
+                    "activations": None,
+                }
+            )
         return ScorerResult(record=record_copy, score=final_output_list)
 
     async def _generate_with_and_without_intervention(
@@ -235,7 +253,7 @@ class SurprisalInterventionScorer(Scorer):
         device = self._get_device()
         enc = self.tokenizer(prompt, return_tensors="pt", truncation=True, padding=True)
         input_ids = enc["input_ids"].to(device)
-        
+
         hooks = []
         if intervene:
 
@@ -246,14 +264,16 @@ class SurprisalInterventionScorer(Scorer):
             layer_to_hook = self._resolve_hookpoint(self.subject_model, hookpoint_str)
 
             direction = self._get_intervention_direction(record).to(device)
-            direction = direction.unsqueeze(0).unsqueeze(0)  # Shape for broadcasting: [1, 1, D]
+            direction = direction.unsqueeze(0).unsqueeze(
+                0
+            )  # Shape for broadcasting: [1, 1, D]
 
             def hook_fn(module, inp, out):
                 hidden_states = out[0] if isinstance(out, tuple) else out
-                
+
                 # Apply intervention to the last token's hidden state
                 hidden_states[:, -1:, :] += self.strength * direction
-                
+
                 # Return the modified activations in their original format
                 if isinstance(out, tuple):
                     return (hidden_states,) + out[1:]
@@ -285,13 +305,15 @@ class SurprisalInterventionScorer(Scorer):
     async def _score_explanation(self, generated_text: str, explanation: str) -> float:
         """Computes log P(explanation | generated_text) under the subject model."""
         device = self._get_device()
-        
+
         # Create the full input sequence: context + explanation
         context_enc = self.tokenizer(generated_text, return_tensors="pt")
         explanation_enc = self.tokenizer(explanation, return_tensors="pt")
-        
-        full_input_ids = torch.cat([context_enc.input_ids, explanation_enc.input_ids], dim=1).to(device)
-        
+
+        full_input_ids = torch.cat(
+            [context_enc.input_ids, explanation_enc.input_ids], dim=1
+        ).to(device)
+
         with torch.no_grad():
             outputs = self.subject_model(full_input_ids)
             logits = outputs.logits
@@ -299,16 +321,16 @@ class SurprisalInterventionScorer(Scorer):
         # We only need to score the explanation part
         context_len = context_enc.input_ids.shape[1]
         # Get logits for positions that predict the explanation tokens
-        explanation_logits = logits[:, context_len - 1:-1, :]
-        
+        explanation_logits = logits[:, context_len - 1 : -1, :]
+
         # Get the target token IDs for the explanation
         target_ids = explanation_enc.input_ids.to(device)
-        
+
         log_probs = F.log_softmax(explanation_logits, dim=-1)
-        
+
         # Gather the log-probabilities of the actual explanation tokens
         token_log_probs = log_probs.gather(2, target_ids.unsqueeze(-1)).squeeze(-1)
-        
+
         return token_log_probs.sum().item()
 
     def _get_intervention_direction(self, record: LatentRecord) -> torch.Tensor:
@@ -324,9 +346,11 @@ class SurprisalInterventionScorer(Scorer):
                 hookpoint_str = self.hookpoint_str or getattr(record, "hookpoint", None)
                 candidate = self.explainer_model.get(hookpoint_str)
 
-            if hasattr(candidate, 'get_feature_vector'):
+            if hasattr(candidate, "get_feature_vector"):
                 sae = candidate
-            elif hasattr(candidate, 'sae') and hasattr(candidate.sae, 'get_feature_vector'):
+            elif hasattr(candidate, "sae") and hasattr(
+                candidate.sae, "get_feature_vector"
+            ):
                 sae = candidate.sae
 
             if sae:
@@ -342,16 +366,17 @@ class SurprisalInterventionScorer(Scorer):
     def _estimate_direction_from_examples(self, record: LatentRecord) -> torch.Tensor:
         """Estimates an intervention direction by averaging activations."""
         device = self._get_device()
-        
+
         examples = self._sanitize_examples(getattr(record, "test", []) or [])
         if not examples:
             hidden_dim = self.subject_model.config.hidden_size
             return torch.zeros(hidden_dim, device=device)
 
         captured_activations = []
+
         def capture_hook(module, inp, out):
             hidden_states = out[0] if isinstance(out, tuple) else out
-            
+
             captured_activations.append(hidden_states[:, -1, :].detach().cpu())
 
         hookpoint_str = self.hookpoint_str or getattr(record, "hookpoint", None)
@@ -359,9 +384,11 @@ class SurprisalInterventionScorer(Scorer):
         handle = layer_to_hook.register_forward_hook(capture_hook)
 
         try:
-            for ex in examples[:min(8, self.num_prompts)]:
+            for ex in examples[: min(8, self.num_prompts)]:
                 prompt = "".join(ex["str_tokens"])
-                input_ids = self.tokenizer(prompt, return_tensors="pt").input_ids.to(device)
+                input_ids = self.tokenizer(prompt, return_tensors="pt").input_ids.to(
+                    device
+                )
                 with torch.no_grad():
                     self.subject_model(input_ids)
         finally:
@@ -373,5 +400,5 @@ class SurprisalInterventionScorer(Scorer):
 
         activations = torch.cat(captured_activations, dim=0).to(device)
         direction = activations.mean(dim=0)
-        
+
         return F.normalize(direction, p=2, dim=0)
