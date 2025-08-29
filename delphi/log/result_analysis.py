@@ -16,7 +16,7 @@ def plot_firing_vs_f1(
     for module, module_df in latent_df.groupby("module"):
 
         if 'firing_count' not in module_df.columns:
-            print(f"WARNING: 'firing_count' column not found for module {module}. 
+            print(f"WARNING: 'firing_count' column not found for module {module}.
                     Skipping plot.")
             continue
 
@@ -175,7 +175,7 @@ def load_data(scores_path: Path, modules: list[str]):
             return pd.DataFrame()
 
         if not isinstance(data, list):
-            print(f"""Warning: Expected a list of results in {path}, but found {type(data)}. 
+            print(f"""Warning: Expected a list of results in {path}, but found {type(data)}.
                     Skipping file.""")
             return pd.DataFrame()
 
@@ -327,9 +327,9 @@ def log_results(
                 print(f"F1 Score: {score_type_summary['f1_score']:.3f}")
 
                 if counts and score_type_summary['weighted_f1'] is not None:
-                    print(f"""Frequency-Weighted F1 Score: 
+                    print(f"""Frequency-Weighted F1 Score:
                             {score_type_summary['weighted_f1']:.3f}""")
-                
+
                 print(f"Precision: {score_type_summary['precision']:.3f}")
                 print(f"Recall: {score_type_summary['recall']:.3f}")
 

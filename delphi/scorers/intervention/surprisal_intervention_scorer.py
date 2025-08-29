@@ -17,7 +17,7 @@ class SurprisalInterventionResult:
 
     Attributes:
         score: The final computed score.
-        avg_kl: The average KL divergence between clean & intervened 
+        avg_kl: The average KL divergence between clean & intervened
                 next-token distributions.
         explanation: The explanation string that was scored.
     """
@@ -47,7 +47,7 @@ class SurprisalInterventionScorer(Scorer):
       2. Compute the log-probability of the explanation conditioned on both the clean
          and intervened generated texts: log P(explanation | text)[cite: 209].
       3. Compute KL divergence between the clean & intervened next-token distributions.
-      4. The final score is the mean change in explanation log-prob, divided by the 
+      4. The final score is the mean change in explanation log-prob, divided by the
          mean KL divergence:
          score = mean(log_prob_intervened - log_prob_clean) / (mean_KL + ε).
     """
@@ -63,7 +63,7 @@ class SurprisalInterventionScorer(Scorer):
                 strength (float): The magnitude of the intervention. Default: 5.0.
                 num_prompts (int): Number of activating examples to test. Default: 3.
                 max_new_tokens (int): Max tokens to generate for continuations.
-                hookpoint (str): The module name (e.g., 'transformer.h.10.mlp') 
+                hookpoint (str): The module name (e.g., 'transformer.h.10.mlp')
                                  for the intervention.
         """
         self.subject_model = subject_model
@@ -121,9 +121,11 @@ class SurprisalInterventionScorer(Scorer):
 
         if not is_valid_format:
             if len(parts) == 1 and hasattr(model, hookpoint_str):
-                 return getattr(model, hookpoint_str)
-            raise ValueError(f"""Hookpoint string '{hookpoint_str}' is not in a recognized format 
-                                 like 'layers.6.mlp'.""")
+                return getattr(model, hookpoint_str)
+            raise ValueError(
+                f"""Hookpoint string '{hookpoint_str}' is not in a recognized format
+                                 like 'layers.6.mlp'."""
+            )
 
         # Heuristically find the model prefix.
         prefix = None
@@ -139,8 +141,9 @@ class SurprisalInterventionScorer(Scorer):
         try:
             return self._find_layer(model, full_path)
         except AttributeError as e:
-            raise AttributeError(f"Could not resolve path '{full_path}'. Model structure might be unexpected. Original error: {e}")
-
+            raise AttributeError(
+                f"Could not resolve path '{full_path}'. Model structure might be unexpected. Original error: {e}"
+            )
 
     def _sanitize_examples(self, examples: List[Any]) -> List[Dict[str, Any]]:
         """
@@ -249,7 +252,7 @@ class SurprisalInterventionScorer(Scorer):
         Returns:
             A tuple containing:
             - The generated text (string).
-            - The log-probability distribution for the token immediately following 
+            - The log-probability distribution for the token immediately following
               the prompt (Tensor).
         """
         device = self._get_device()

@@ -3,10 +3,10 @@ from .classifier.fuzz import FuzzingScorer
 from .classifier.intruder import IntruderScorer
 from .embedding.embedding import EmbeddingScorer
 from .embedding.example_embedding import ExampleEmbeddingScorer
+from .intervention.surprisal_intervention_scorer import SurprisalInterventionScorer
 from .scorer import Scorer
 from .simulator.oai_simulator import OpenAISimulator
 from .surprisal.surprisal import SurprisalScorer
-from .intervention.surprisal_intervention_scorer import SurprisalInterventionScorer
 
 __all__ = [
     "FuzzingScorer",
@@ -18,5 +18,4 @@ __all__ = [
     "IntruderScorer",
     "ExampleEmbeddingScorer",
     "SurprisalInterventionScorer",
-    
 ]
