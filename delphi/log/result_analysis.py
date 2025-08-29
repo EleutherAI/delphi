@@ -15,9 +15,11 @@ def plot_firing_vs_f1(
     out_dir.mkdir(parents=True, exist_ok=True)
     for module, module_df in latent_df.groupby("module"):
 
-        if 'firing_count' not in module_df.columns:
-            print(f"""WARNING: 'firing_count' column not found for module {module}. 
-                      Skipping plot.""")
+        if "firing_count" not in module_df.columns:
+            print(
+                f"""WARNING: 'firing_count' column not found for module {module}.
+                      Skipping plot."""
+            )
             continue
 
         module_df = module_df.copy()
@@ -175,9 +177,11 @@ def load_data(scores_path: Path, modules: list[str]):
             return pd.DataFrame()
 
         if not isinstance(data, list):
-            print(f"""Warning: Expected a list of results in {path}, 
-                      but found {type(data)}. 
-                      Skipping file.""")
+            print(
+                f"""Warning: Expected a list of results in {path},
+                      but found {type(data)}.
+                      Skipping file."""
+            )
             return pd.DataFrame()
 
         latent_idx = int(path.stem.split("latent")[-1])
@@ -327,9 +331,11 @@ def log_results(
                 print(f"Class-Balanced Accuracy: {score_type_summary['accuracy']:.3f}")
                 print(f"F1 Score: {score_type_summary['f1_score']:.3f}")
 
-                if counts and score_type_summary['weighted_f1'] is not None:
-                    print(f"""Frequency-Weighted F1 Score:
-                            {score_type_summary['weighted_f1']:.3f}""")
+                if counts and score_type_summary["weighted_f1"] is not None:
+                    print(
+                        f"""Frequency-Weighted F1 Score:
+                            {score_type_summary['weighted_f1']:.3f}"""
+                    )
 
                 print(f"Precision: {score_type_summary['precision']:.3f}")
                 print(f"Recall: {score_type_summary['recall']:.3f}")
