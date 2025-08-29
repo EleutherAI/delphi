@@ -18,7 +18,7 @@ class SurprisalInterventionResult:
 
     Attributes:
         score: The final computed score.
-        avg_kl: The average KL divergence between the clean and intervened next-token distributions.
+        avg_kl: The average KL-D between clean & intervened next-token distributions.
         explanation: The explanation string that was scored.
     """
     score: float
@@ -36,18 +36,19 @@ class SurprisalInterventionScorer(Scorer):
     by the intervention's strength, measured by the KL divergence between the clean
     and intervened next-token distributions.
 
-    Reference: Paulo et al., "Automatically Interpreting Millions of Features in Large Language Models"
+    Reference: Paulo et al., "Automatically Interpreting Millions of Features in LLMs"
     (https://arxiv.org/pdf/2410.13928), Section 3.3.5[cite: 206, 207].
 
     Pipeline:
       1. For a small set of activating prompts:
          a. Generate a continuation and get the next-token distribution ("clean").
-         b. Add a directional vector for the feature to the activations and repeat ("intervened").
+         b. Add directional vector for the feature to the activations ("intervened").
       2. Compute the log-probability of the explanation conditioned on both the clean
          and intervened generated texts: log P(explanation | text)[cite: 209].
-      3. Compute the KL divergence between the clean and intervened next-token distributions[cite: 216].
-      4. The final score is the mean change in explanation log-prob, divided by the mean KL divergence:
-         score = mean(log_prob_intervened - log_prob_clean) / (mean_KL + ε)[cite: 209].
+      3. Compute KL divergence between the clean & intervened next-token distributions.
+      4. The final score is the mean change in explanation log-prob, divided by the 
+         mean KL divergence:
+         score = mean(log_prob_intervened - log_prob_clean) / (mean_KL + ε).
     """
     name = "surprisal_intervention"
 
@@ -55,12 +56,13 @@ class SurprisalInterventionScorer(Scorer):
         """
         Args:
             subject_model: The language model to generate from and score with.
-            explainer_model: An optional model (e.g., an SAE) used to get feature directions.
+            explainer_model: A model (e.g., an SAE) used to get feature directions.
             **kwargs: Configuration options.
                 strength (float): The magnitude of the intervention. Default: 5.0.
                 num_prompts (int): Number of activating examples to test. Default: 3.
-                max_new_tokens (int): Max tokens to generate for continuations. Default: 20.
-                hookpoint (str): The module name (e.g., 'transformer.h.10.mlp') for the intervention.
+                max_new_tokens (int): Max tokens to generate for continuations.
+                hookpoint (str): The module name (e.g., 'transformer.h.10.mlp') 
+                                 for the intervention.
         """
         self.subject_model = subject_model
         self.explainer_model = explainer_model
@@ -118,7 +120,8 @@ class SurprisalInterventionScorer(Scorer):
         if not is_valid_format:
             if len(parts) == 1 and hasattr(model, hookpoint_str):
                  return getattr(model, hookpoint_str)
-            raise ValueError(f"Hookpoint string '{hookpoint_str}' is not in a recognized format like 'layers.6.mlp'.")
+            raise ValueError(f"""Hookpoint string '{hookpoint_str}' is not in a recognized format 
+                                 like 'layers.6.mlp'.""")
 
         #Heuristically find the model prefix.
         prefix = None
@@ -134,7 +137,8 @@ class SurprisalInterventionScorer(Scorer):
         try:
             return self._find_layer(model, full_path)
         except AttributeError as e:
-            raise AttributeError(f"Could not resolve path '{full_path}'. Model structure might be unexpected. Original error: {e}")
+            raise AttributeError(f"""Could not resolve path '{full_path}'.
+                            Model structure might be unexpected. Original error: {e}""")
 
 
     def _sanitize_examples(self, examples: List[Any]) -> List[Dict[str, Any]]:
@@ -230,7 +234,8 @@ class SurprisalInterventionScorer(Scorer):
         Returns:
             A tuple containing:
             - The generated text (string).
-            - The log-probability distribution for the token immediately following the prompt (Tensor).
+            - The log-probability distribution for the token immediately following 
+              the prompt (Tensor).
         """
         device = self._get_device()
         enc = self.tokenizer(prompt, return_tensors="pt", truncation=True, padding=True)

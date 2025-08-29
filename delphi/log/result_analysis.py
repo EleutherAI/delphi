@@ -16,7 +16,8 @@ def plot_firing_vs_f1(
     for module, module_df in latent_df.groupby("module"):
 
         if 'firing_count' not in module_df.columns:
-            print(f"WARNING: 'firing_count' column not found for module {module}. Skipping plot.")
+            print(f"""WARNING: 'firing_count' column not found for module {module}. 
+                    Skipping plot.""")
             continue
 
         module_df = module_df.copy()
@@ -49,7 +50,7 @@ def import_plotly():
 
 
 def compute_auc(df: pd.DataFrame) -> float | None:
-    # Filter for rows where probability is not None and there's more than one unique value
+
     valid_df = df[df.probability.notna()]
     if valid_df.probability.nunique() <= 1:
         return None
@@ -72,7 +73,7 @@ def plot_accuracy_hist(df: pd.DataFrame, out_dir: Path):
 
 
 def plot_roc_curve(df: pd.DataFrame, out_dir: Path):
-    # Filter for rows where probability is not None and there's more than one unique value
+
     valid_df = df[df.probability.notna()]
     if valid_df.empty or valid_df.activating.nunique() <= 1 or valid_df.probability.nunique() <= 1:
         return
@@ -145,7 +146,8 @@ def load_data(scores_path: Path, modules: list[str]):
             return pd.DataFrame()
         
         if not isinstance(data, list):
-            print(f"Warning: Expected a list of results in {path}, but found {type(data)}. Skipping file.")
+            print(f"""Warning: Expected a list of results in {path}, but found {type(data)}. 
+                    Skipping file.""")
             return pd.DataFrame()
 
         latent_idx = int(path.stem.split("latent")[-1])
@@ -285,7 +287,8 @@ def log_results(
                 print(f"F1 Score: {score_type_summary['f1_score']:.3f}")
 
                 if counts and score_type_summary['weighted_f1'] is not None:
-                    print(f"Frequency-Weighted F1 Score: {score_type_summary['weighted_f1']:.3f}")
+                    print(f"""Frequency-Weighted F1 Score: 
+                            {score_type_summary['weighted_f1']:.3f}""")
                 
                 print(f"Precision: {score_type_summary['precision']:.3f}")
                 print(f"Recall: {score_type_summary['recall']:.3f}")
