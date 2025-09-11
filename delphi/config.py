@@ -148,18 +148,14 @@ class RunConfig(Serializable):
     the default single token explainer, and 'none' for no explanation generation."""
 
     scorers: list[str] = list_field(
-        choices=[
-            "fuzz",
-            "detection",
-            "simulation",
-        ],
+        choices=["fuzz", "detection", "simulation", "surprisal_intervention"],
         default=[
             "fuzz",
             "detection",
         ],
     )
-    """Scorer methods to score latent explanations. Options are 'fuzz', 'detection', and
-    'simulation'."""
+    """Scorer methods to score latent explanations. Options are 'fuzz', 'detection',
+    'simulation' and 'surprisal_intervention'."""
 
     name: str = ""
     """The name of the run. Results are saved in a directory with this name."""
