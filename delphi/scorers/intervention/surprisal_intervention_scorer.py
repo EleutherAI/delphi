@@ -114,20 +114,21 @@ class SurprisalInterventionScorer(Scorer):
 
 
     def _get_full_hookpoint_path(self, hookpoint_str: str) -> str:
-            """
-            Heuristically finds the model's prefix and constructs the full hookpoint path string.
-            e.g., 'layers.6.mlp' -> 'model.layers.6.mlp'
-            """
-            # Heuristically find the model prefix.
-            prefix = None
-            for p in ["gpt_neox", "transformer", "model"]:
-                if hasattr(self.subject_model, p):
-                    candidate_body = getattr(self.subject_model, p)
-                    if hasattr(candidate_body, "h") or hasattr(candidate_body, "layers"):
-                        prefix = p
-                        break
-            
-            return f"{prefix}.{hookpoint_str}" if prefix else hookpoint_str
+        """
+        Heuristically finds the model's prefix and constructs the full hookpoint 
+        path string.
+        e.g., 'layers.6.mlp' -> 'model.layers.6.mlp'
+        """
+        # Heuristically find the model prefix.
+        prefix = None
+        for p in ["gpt_neox", "transformer", "model"]:
+            if hasattr(self.subject_model, p):
+                candidate_body = getattr(self.subject_model, p)
+                if hasattr(candidate_body, "h") or hasattr(candidate_body, "layers"):
+                    prefix = p
+                    break
+        
+        return f"{prefix}.{hookpoint_str}" if prefix else hookpoint_str
 
 
     def _resolve_hookpoint(self, model: Any, hookpoint_str: str) -> Any:
@@ -143,6 +144,7 @@ class SurprisalInterventionScorer(Scorer):
                                      Model structure might be unexpected.
                                      Original error: {e}"""
             )
+
 
     def _sanitize_examples(self, examples: List[Any]) -> List[Dict[str, Any]]:
         """
@@ -276,7 +278,7 @@ class SurprisalInterventionScorer(Scorer):
 
     async def _truncate_prompt(self, prompt: str, record: LatentRecord) -> str:
         """
-        Truncates a prompt to end just before the first token where the latent activates.
+        Truncates prompt to end just before the first token where latent activates.
         """
         activations = await self._get_latent_activations(prompt, record)
         if activations.numel() == 0:
@@ -299,7 +301,7 @@ class SurprisalInterventionScorer(Scorer):
         self, prompts: List[str], record: LatentRecord
     ) -> Tuple[float, float]:
         """
-        Performs a binary search to find the intervention strength that matches `target_kl`.
+        Performs a binary search to find intervention strength that matches target_kl.
         """
         low_strength, high_strength = 0.0, 40.0 # Heuristic search range
         best_strength = self.target_kl # Default to target_kl if search fails
@@ -384,7 +386,7 @@ class SurprisalInterventionScorer(Scorer):
                 # 2. Create the corresponding indices needed for the decode method.
                 indices = torch.tensor([[[record.feature_id]]], device=sae_device, dtype=torch.long)
 
-                # 3. Decode this one-hot vector to get the feature's direction in the hidden space.
+                # 3. Decode one-hot vector to get feature's direction in hidden space.
                 # We subtract the decoded zero vector to remove any decoder bias.
                 decoded_zero = sae.decode(torch.zeros_like(one_hot_activation), indices)
                 decoder_vector = sae.decode(one_hot_activation, indices) - decoded_zero
@@ -485,13 +487,17 @@ class SurprisalInterventionScorer(Scorer):
                         return instance  # Unwrapped successfully.
                 
                 # If we found a partial but failed to unwrap it, we cannot proceed.
-                print(f"ERROR: Found a partial for {hookpoint_str} but could not unwrap the SAE instance.")
+                print(
+                    f"""ERROR: Found a partial for {hookpoint_str} but could not 
+                    unwrap the SAE instance.""")
                 return None
             
             # If it's not a partial, it's the model itself.
             return candidate
 
-        print(f"ERROR: Surprisal scorer could not find an SAE for hookpoint '{hookpoint_str}'")
+        print(
+            f"""ERROR: Surprisal scorer could not find 
+            an SAE for hookpoint '{hookpoint_str}'""")
         return None
 
 
@@ -518,7 +524,8 @@ class SurprisalInterventionScorer(Scorer):
             
             return candidate
 
-        print(f"ERROR: Surprisal scorer could not find an SAE for hookpoint '{hookpoint_str}'")
+        print(f"""ERROR: Surprisal scorer could not find 
+                an SAE for hookpoint '{hookpoint_str}'""")
         return None
 
 
