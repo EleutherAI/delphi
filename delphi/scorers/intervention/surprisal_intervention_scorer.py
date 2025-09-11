@@ -112,7 +112,7 @@ class SurprisalInterventionScorer(Scorer):
 
     def _get_full_hookpoint_path(self, hookpoint_str: str) -> str:
         """
-        Heuristically finds the model's prefix and constructs the full hookpoint 
+        Heuristically finds the model's prefix and constructs the full hookpoint
         path string.
         e.g., 'layers.6.mlp' -> 'model.layers.6.mlp'
         """
@@ -124,7 +124,7 @@ class SurprisalInterventionScorer(Scorer):
                 if hasattr(candidate_body, "h") or hasattr(candidate_body, "layers"):
                     prefix = p
                     break
-        
+
         return f"{prefix}.{hookpoint_str}" if prefix else hookpoint_str
 
     def _resolve_hookpoint(self, model: Any, hookpoint_str: str) -> Any:
@@ -140,7 +140,6 @@ class SurprisalInterventionScorer(Scorer):
                                      Model structure might be unexpected.
                                      Original error: {e}"""
             )
-
 
     def _sanitize_examples(self, examples: List[Any]) -> List[Dict[str, Any]]:
         """
@@ -517,16 +516,18 @@ class SurprisalInterventionScorer(Scorer):
 
                 # If we found a partial but failed to unwrap it, we cannot proceed.
                 print(
-                    f"""ERROR: Found a partial for {hookpoint_str} but could not 
-                    unwrap the SAE instance.""")
+                    f"""ERROR: Found a partial for {hookpoint_str} but could not
+                    unwrap the SAE instance."""
+                )
                 return None
 
             # If it's not a partial, it's the model itself.
             return candidate
 
         print(
-            f"""ERROR: Surprisal scorer could not find 
-            an SAE for hookpoint '{hookpoint_str}'""")
+            f"""ERROR: Surprisal scorer could not find
+            an SAE for hookpoint '{hookpoint_str}'"""
+        )
         return None
 
     def _get_sae_for_hookpoint(self, hookpoint_str: str, record: LatentRecord) -> Any:
@@ -552,8 +553,10 @@ class SurprisalInterventionScorer(Scorer):
 
             return candidate
 
-        print(f"""ERROR: Surprisal scorer could not find 
-                an SAE for hookpoint '{hookpoint_str}'""")
+        print(
+            f"""ERROR: Surprisal scorer could not find
+                an SAE for hookpoint '{hookpoint_str}'"""
+        )
         return None
 
     def _get_intervention_direction(self, record: LatentRecord) -> torch.Tensor:
