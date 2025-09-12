@@ -27,7 +27,6 @@ SYSTEM = """You are a meticulous AI researcher conducting an important investiga
 Guidelines:
 
 You will be given a list of text examples on which special words are selected and between delimiters like <<this>>. If a sequence of consecutive tokens all are important, the entire sequence of tokens will be contained between delimiters <<just like this>>. How important each token is for the behavior is listed after each example in parentheses.
-
 - Try to produce a concise final description. Simply describe the text latents that are common in the examples, and what patterns you found.
 - If the examples are uninformative, you don't need to mention them. Don't focus on giving examples of important tokens, but try to summarize the patterns found in the examples.
 - Do not mention the marker tokens (<< >>) in your explanation.
@@ -59,9 +58,36 @@ To better find the explanation for the language patterns go through the followin
 2. Write down general shared latents of the text examples. This could be related to the full sentence or to the words surrounding the marked words.
 
 3. Formulate an hypothesis and write down the final explanation using [EXPLANATION]:.
-
 """
 
+SYSTEM_GRAPH = """You are explaining the behavior of a neuron in a neural network. You will be graded on the quality of your explanation in terms of simplicity and accuracy. Do not make mistakes and follow all instructions carefully.
+### Instructions
+Your response should be a very concise explanation that captures what the neuron detects or predicts by finding patterns in lists:
+    - The explanation should be specific. For example, "unique words" is not a specific enough pattern, nor is "foreign words"
+    - The explanation can contain multiple different elements if one pattern is not sufficient to cover all examples. Remember to use only a few words to describe each one
+    - There will be a few examples in each of the provided lists that are irrelevant to the true explanation and should be discarded when looking for the pattern. You must cut through the noise.
+
+To explain the neuron, try all methods and then go back to a previous method that works best. The methods are listed in order of probability of being correct, but does not mean you should always choose method 1.
+    - Method 1: Look at MAX_ACTIVATING_TOKENS. If they share something specific in common, or are all the same token or a variation of the same token (like different cases or conjugations), respond with that token
+    - Method 2: Look at TOKENS_AFTER_MAX_ACTIVATING_TOKEN. Try to find a specific pattern or similarity in all the tokens. A common pattern is that they all start with the same letter.
+    - Method 3: Look at TOP_POSITIVE_LOGITS for similarities.
+    - Method 4: Look at TOP_NEGATIVE_LOGITS for similarities.
+
+To further refine your explanation, follow these guidelines:
+    - Do not add unnecessary phrases like "words related to", "concepts related to", or "variations of the word"
+    - Do not mention "tokens" or "patterns" or the method used in your explanation
+    - Look at the GRAPH_PROMPT for additional context. Since there may be multiple possible explanations, use the GRAPH_PROMPT to narrow it down.
+
+Follow these instructions step by step and then produce the response in the format specified below. Please use square brackets as specified in the format to help the grader score your answer.
+Format:
+Method 1: <Plausible explanation using this method and rationale for whether it is the best or insufficient>
+Method 2: <Plausible explanation using this method and rationale for whether it is the best or insufficient>
+Method 3: <Plausible explanation using this method and rationale for whether it is the best or insufficient>
+Method 4: <Plausible explanation using this method and rationale for whether it is the best or insufficient>
+Answer:
+[SELECTED METHOD] <The method number you chose>
+[EXPLANATION] <Your final refined explanation>
+"""
 
 ### EXAMPLE 1 ###
 

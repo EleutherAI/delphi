@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 from pathlib import Path
 from typing import Optional
@@ -235,6 +236,7 @@ def constructor(
     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
     all_data: Optional[dict[int, ActivationData]] = None,
     seed: int = 42,
+    logits_directory: Optional[os.PathLike] = None,
 ) -> LatentRecord | None:
     cache_ctx_len = tokens.shape[1]
     example_ctx_len = constructor_cfg.example_ctx_len
@@ -260,6 +262,9 @@ def constructor(
     # per context frequency
     record.per_context_frequency = len(unique_batch_pos) / n_windows
 
+    # add top/bottom logits if available
+    if logits_directory:
+        record = load_graph_info(record, logits_directory)
     # Add activation examples to the record in place
     if constructor_cfg.center_examples:
         token_windows, act_windows = pool_max_activation_windows(
@@ -329,6 +334,46 @@ def constructor(
     else:
         raise ValueError(f"Invalid non-activating source: {source_non_activating}")
     record.not_active = non_activating_examples
+    return record
+
+
+def load_graph_info(record: LatentRecord, logits_directory: str) -> LatentRecord:
+    """
+    Load top and bottom logits from a file based on the latent module name. Also loads
+    """
+    import re
+
+    from delphi import logger
+
+    def cantor(num1, num2):
+        return (num1 + num2) * (num1 + num2 + 1) // 2 + num2
+
+    match = re.search(r"\d+", record.latent.module_name)
+    logits_file = ""
+    if match:
+        layer = int(match.group(0))
+        logits_file = (
+            f"{logits_directory}/{str(cantor(layer,record.latent.latent_index))}.json"
+        )
+
+    else:
+        logger.warning(
+            "Module name does not include layer number. Failed to load logits"
+        )
+        logits_file = ""
+
+    if os.path.exists(logits_file):
+        with open(logits_file, "r") as file:
+            data = json.load(file)
+            record.top_logits = data.get("top_logits", [])
+            record.bot_logits = data.get("bottom_logits", [])
+            record.parents = [
+                (f, i)
+                for (f, i) in data.get("parent_connections", [])
+                if abs(i) > 0.00001
+            ]
+    else:
+        logger.warning("Could not find graph info file. Failed to load logits/parents")
     return record
 
 

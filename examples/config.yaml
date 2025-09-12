@@ -1,0 +1,47 @@
+# Model settings
+model_name: "google/gemma-2-2b-it"
+sparse_model: "../models/gemmascope-sparsify-1m"
+explainer_model: "google/gemma-3-27b-it"
+hookpoints: ["layers.5.mlp"]
+
+# Experiment identification
+prompt_name: "fact_mj_bball"
+experiment_name: "base"
+
+# Directory structure (all paths computed from these)
+base_dir: "."
+results_dir: "results"
+cache_name: "gemma2b_transcoder-sparsify-1m_cache"
+
+# Explainer settings
+explainer_type: "graph"
+threshold: 0.3
+temperature: 0.0
+max_latents: 50
+max_examples: 20
+max_parent_explanations: 0
+verbose: true
+activations: true
+top_logits: false
+bot_logits: false
+cot: false
+graph_prompt: false
+
+# Client settings
+client_type: "offline"
+max_memory: 0.8
+max_model_len: 6000
+
+# Sampling settings
+n_examples_train: 30
+n_examples_test: 0
+n_quantiles: 10
+train_type: "top"
+test_type: "top"
+
+# Constructor settings
+example_ctx_len: 16
+min_examples: 10
+n_non_activating: 0
+center_examples: true
+non_activating_source: "random"
