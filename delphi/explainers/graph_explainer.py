@@ -6,19 +6,11 @@ from typing import Optional
 
 import torch
 
-from delphi.explainers.default.prompts import (
-    BOT_LOGITS,
-    GRAPH_COT,
-    GRAPH_PROMPT,
-    PARENT_NODE_PROMPT,
-    SYSTEM_GRAPH,
-    TOP_LOGITS,
-)
+from delphi.explainers.default.prompts import SYSTEM_GRAPH
 from delphi.explainers.explainer import Explainer, ExplainerResult, Response
 from delphi.latents.latents import (
     ActivatingExample,
     LatentRecord,
-    NonActivatingExample,
 )
 
 
@@ -30,8 +22,6 @@ class GraphExplainer(Explainer):
     """Whether to use chain of thought reasoning in the prompt."""
     max_examples: int = 15
     """Maximum number of activating examples to use."""
-    max_non_activating: int = 5
-    """Maximum number of non-activating examples to use."""
     graph_info_path: Optional[os.PathLike] = None
     """Path to the graph information file."""
     explanations_dir: Optional[os.PathLike] = None
@@ -44,6 +34,8 @@ class GraphExplainer(Explainer):
     """Whether to show the top logits for a feature to the explainer"""
     bot_logits: bool = True
     """Whether to show the bottom logits for a feature to the explainer"""
+    disable_thinking: bool = False
+    """Appends /no_think to the user prompt to disable thinking on Qwen3 models"""
 
     async def __call__(self, record: LatentRecord) -> ExplainerResult:
         """
@@ -63,21 +55,6 @@ class GraphExplainer(Explainer):
         # Sample from both activating and non-activating examples
         activating_examples = record.train[: self.max_examples]
 
-        non_activating_examples = []
-        if len(record.not_active) > 0:
-            non_activating_examples = record.not_active[: self.max_non_activating]
-
-            # Ensure non-activating examples have normalized activations for consistency
-            for example in non_activating_examples:
-                if example.normalized_activations is None:
-                    # Use zeros for non-activating examples
-                    example.normalized_activations = torch.zeros_like(
-                        example.activations
-                    )
-
-        # Combine examples for the prompt
-        combined_examples = activating_examples + non_activating_examples
-
         top_logits = record.top_logits if self.top_logits else []
         bot_logits = record.bot_logits if self.bot_logits else []
         if self.graph_info_path is None or not os.path.exists(self.graph_info_path):
@@ -93,17 +70,16 @@ class GraphExplainer(Explainer):
             : min(len(record.parents), self.max_parent_explanations)
         ]
         parent_explanations = []
-        for parent, influence in parent_explanations_files:
+        for parent in parent_explanations_files:
             parent_path = os.path.join(self.explanations_dir, str(parent))
             if not os.path.exists(parent_path):
-                print(f"Parent explanation file does not exist: {parent_path}")
                 continue
             with open(parent_path, "r") as f:
-                parent_explanations.append((f.read(), influence))
+                parent_explanations.append(f.read())
 
         # Build the prompt with both types of examples
         messages = self._build_prompt(
-            combined_examples,
+            activating_examples,
             top_logits,
             bot_logits,
             self.graph_prompt,
@@ -119,7 +95,7 @@ class GraphExplainer(Explainer):
                 response_text = response.text
             else:
                 response_text = response
-            explanation = self.parse_explanation(response_text)
+            explanation = self._parse_explanation(response_text)
             return ExplainerResult(
                 record=record,
                 explanation=explanation,
@@ -129,12 +105,51 @@ class GraphExplainer(Explainer):
         except Exception as e:
             print(f"Explanation parsing failed: {repr(e)}")
             return ExplainerResult(
-                record=record, explanation=repr(e), prompt=messages[1]["content"]
+                record=record, explanation=response.text, prompt=messages[1]["content"]
             )
+
+    def _parse_explanation(self, response):
+        # Extract explanation from the response text
+        explanation = ""
+        if "[EXPLANATION]" in response:
+            explanation = response.split("[EXPLANATION]")[-1].strip()
+        else:
+            explanation = response.strip()
+
+        method = 0
+        if "[SELECTED METHOD]" in response:
+            try:
+                method = int(response.split("[SELECTED METHOD]")[-1].strip()[-1])
+            except Exception as e:
+                method = 0
+                print(f"Failed to parse method: {repr(e)} from response: {response}")
+
+        prefixes = ["", "[say] ", "", "[promote] ", "[supress] "]
+        explanation = prefixes[method] + explanation
+        return explanation
+
+    def _parse_information(self, examples: list[ActivatingExample]):
+        # Extract relevant information from activating examples
+        activating_tokens = []
+        text_after_tokens = []
+        plain_examples = []
+        for example in examples:
+            # find non zero activated tokens
+            activated_idxs = torch.where(example.normalized_activations > 0)[0]
+            activated_list = activated_idxs.tolist()
+            activating_tokens.extend([example.str_tokens[i] for i in activated_list])
+            example.str_tokens.append("")  # to avoid index error
+            text_after_tokens.extend(
+                [example.str_tokens[i + 1] for i in activated_list]
+            )
+
+            plain_examples.append(" ".join(example.str_tokens))
+
+        return activating_tokens, text_after_tokens, plain_examples
 
     def _build_prompt(  # type: ignore
         self,
-        examples: list[ActivatingExample | NonActivatingExample],
+        examples: list[ActivatingExample],
         top_logits: list[str],
         bot_logits: list[str],
         prompt: str,
@@ -154,88 +169,40 @@ class GraphExplainer(Explainer):
             A list of message dictionaries for the prompt.
         """
         highlighted_examples = ["### INPUTS:"]
+        (activating_tokens, text_after_tokens, plain_examples) = (
+            self._parse_information(examples)
+        )
+        highlighted_examples.append("\nMAX_ACTIVATING_TOKENS:")
+        highlighted_examples.append(", ".join(activating_tokens))
 
-        # First, separate activating and non-activating examples
-        activating_examples = [
-            ex for ex in examples if isinstance(ex, ActivatingExample)
-        ]
-        non_activating_examples = [
-            ex for ex in examples if not isinstance(ex, ActivatingExample)
-        ]
+        highlighted_examples.append("\nTOKENS_AFTER_MAX_ACTIVATING_TOKEN:")
+        highlighted_examples.append(", ".join(text_after_tokens))
 
-        # Process activating examples
-        if activating_examples:
-            highlighted_examples.append("ACTIVATING EXAMPLES:")
-            for i, example in enumerate(activating_examples, 1):
-                str_toks = example.str_tokens
-                activations = example.activations.tolist()
-                ex = self._highlight(str_toks, activations).strip().replace("\n", "")
-                highlighted_examples.append(f"Example {i}:  {ex}")
+        highlighted_examples.append("\nTOP_POSITIVE_LOGITS:")
+        highlighted_examples.append(", ".join(top_logits))
 
-                if self.activations and example.normalized_activations is not None:
-                    normalized_activations = example.normalized_activations.tolist()
-                    highlighted_examples.append(
-                        self._join_activations(
-                            str_toks, activations, normalized_activations
-                        )
-                    )
+        highlighted_examples.append("\nTOP_NEGATIVE_LOGITS:")
+        highlighted_examples.append(", ".join(bot_logits))
 
-        # Process non-activating examples
-        if non_activating_examples:
-            highlighted_examples.append("\nNON-ACTIVATING EXAMPLES:")
-            for i, example in enumerate(non_activating_examples, 1):
-                str_toks = example.str_tokens
-                activations = example.activations.tolist()
-                # Note: For non-activating examples, the _highlight method won't
-                # highlight anything since activation values will be below threshold
-                ex = self._highlight(str_toks, activations).strip().replace("\n", "")
-                highlighted_examples.append(f"Example {i}:  {ex}")
+        highlighted_examples.append("\nTOP_ACTIVATING_TEXT:")
+        highlighted_examples.append(", ".join(plain_examples))
 
         # If there are parent explanations, add them to the prompt
         if parent_explanations:
-            highlighted_examples.append("\nPARENT EXPLANATIONS:")
-            for i, (explanation, strength) in enumerate(parent_explanations, 1):
-                highlighted_examples.append(
-                    f"Parent Explanation {i}: {explanation} (Strength: {strength})"
-                )
+            highlighted_examples.append("\nTOP_PARENT_EXPLANATIONS:")
+            highlighted_examples.append(", ".join(parent_explanations))
 
         # If a prompt is provided, include it in the messages
         if prompt:
-            highlighted_examples.append(f"\nPROMPT: {prompt}")
-        # If top logits are provided, include them in the messages
-        if top_logits:
-            highlighted_examples.append(f"\nTOP LOGITS: {', '.join(top_logits)}")
-        # If bottom logits are provided, include them in the messages
-        if bot_logits:
-            highlighted_examples.append(f"\nBOTTOM LOGITS: {', '.join(bot_logits)}")
+            highlighted_examples.append(f"\nGRAPH_PROMPT: \n{prompt}")
 
-        highlighted_examples.append(
-            "\n### Now output the explanation as requested:\n /no_think"
-        )
-        # Join all sections into a single string
+        highlighted_examples.append("\n### OUTPUT:")
+        highlighted_examples.append("/no_think" if self.disable_thinking else "")
         highlighted_examples_str = "\n".join(highlighted_examples)
-
-        # build the system prompt
-        graph_prompt = GRAPH_PROMPT if self.graph_prompt else ""
-        top_logits_prompt = TOP_LOGITS if self.top_logits else ""
-        bot_logits_prompt = BOT_LOGITS if self.bot_logits else ""
-        parent_explanations_prompt = (
-            PARENT_NODE_PROMPT if self.max_parent_explanations > 0 else ""
-        )
-        cot_prompt = GRAPH_COT if self.cot else ""
 
         # Create messages array with the system prompt
         return [
-            {
-                "role": "system",
-                "content": SYSTEM_GRAPH.format(
-                    graph_prompt=graph_prompt,
-                    top_logits=top_logits_prompt,
-                    bot_logits=bot_logits_prompt,
-                    parent_explanations=parent_explanations_prompt,
-                    cot=cot_prompt,
-                ),
-            },
+            {"role": "system", "content": SYSTEM_GRAPH},
             {
                 "role": "user",
                 "content": highlighted_examples_str,

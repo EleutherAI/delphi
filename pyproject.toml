@@ -24,7 +24,7 @@ dependencies = [
     "flask",
     "vllm==0.8.4",
     "aiofiles",
-    "sentence_transformers",
+    "sentence-transformers",
     "anyio>=4.8.0",
     "faiss-cpu",
     "asyncer>=0.0.8",

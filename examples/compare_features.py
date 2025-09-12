@@ -50,7 +50,7 @@ def parse_delphi_features(delphi_file: str) -> Dict[str, dict]:
                 entry = json.loads(line.strip())
 
                 feature_field = entry.get("feature", "")
-                output_field = entry.get("output", "")
+                output_field = entry.get("explanation", "")
 
                 # Parse feature field like "layers.0.mlp_411"
                 # Extract layer and feature number
@@ -62,18 +62,7 @@ def parse_delphi_features(delphi_file: str) -> Dict[str, dict]:
                         feature = match.group(2)
                         feature_id = f"{layer}_{feature}"
 
-                        # Extract explanation from output field
-                        # Handle both old format (with "[EXPLANATION]: " prefix)
-                        # and new format (direct explanation)
-                        explanation = ""
-                        if "[EXPLANATION]: " in output_field:
-                            # Old format: extract after "[EXPLANATION]: "
-                            explanation = output_field.split("[EXPLANATION]: ")[
-                                -1
-                            ].strip()
-                        else:
-                            # New format: use output field directly
-                            explanation = output_field.strip()
+                        explanation = output_field.strip()
 
                         features[feature_id] = {
                             "explanation": explanation,
@@ -117,8 +106,8 @@ def parse_rationale_and_score(response: str) -> tuple[str, int]:
     rationale_pattern = r"rationale:\s*(.+?)(?=score:|$)"
     score_pattern = r"score:\s*([012])"
 
-    rationale = ""
-    score = 0  # Default score
+    rationale = "DNE"
+    score = -1  # Default score
 
     # Extract rationale
     rationale_match = re.search(rationale_pattern, response, re.IGNORECASE | re.DOTALL)
@@ -131,46 +120,6 @@ def parse_rationale_and_score(response: str) -> tuple[str, int]:
     score_match = re.search(score_pattern, response, re.IGNORECASE)
     if score_match:
         score = int(score_match.group(1))
-    else:
-        # Fallback: look for any score in the response
-        fallback_patterns = [
-            r"\b([123])\b.*(?:similar|score)",
-            r"([123])\s*[-/]",
-            r"^([123])",  # Score at beginning
-            r"([123])$",  # Score at end
-        ]
-
-        for pattern in fallback_patterns:
-            match = re.search(pattern, response.lower())
-            if match:
-                score = int(match.group(1))
-                break
-        else:
-            # Semantic indicators as final fallback
-            response_lower = response.lower()
-            if any(
-                word in response_lower
-                for word in [
-                    "very similar",
-                    "highly similar",
-                    "nearly identical",
-                    "almost same",
-                ]
-            ):
-                score = 3
-            elif any(
-                word in response_lower
-                for word in ["not similar", "different", "unrelated", "dissimilar"]
-            ):
-                score = 1
-
-    # If no rationale was extracted, try to get first sentence of response
-    if not rationale:
-        sentences = response.split(".")
-        if sentences:
-            rationale = sentences[0].strip()
-            if not rationale and len(sentences) > 1:
-                rationale = sentences[1].strip()
 
     return rationale, score
 
@@ -226,24 +175,21 @@ Score: 0
 Using the above information as guidance, answer for the following pair:
 A: {feature['neuronpedia_explanation'].strip()}
 B: {feature['delphi_explanation'].strip()}
-/no_think
 """
         prompts.append(prompt)
     return prompts
 
 
-def process_explanation_comparisons(llm: LLM, common_features: List[Dict]) -> Dict:
+def process_explanation_comparisons(
+    llm: LLM, common_features: List[Dict]
+) -> Optional[Dict]:
     """
     Process all common features through LLM for similarity scoring using batch
     processing.
     """
     if not llm:
-        return {
-            "total_score": 0,
-            "max_possible": 0,
-            "average_score": 0.0,
-            "individual_scores": [],
-        }
+        print("LLM failed to initialize")
+        return None
 
     print(
         f"Comparing {len(common_features)} feature explanations with LLM "
@@ -264,6 +210,7 @@ def process_explanation_comparisons(llm: LLM, common_features: List[Dict]) -> Di
         # Parse all responses
         individual_scores = []
         total_score = 0
+        valid = 0
 
         for feature, output in zip(common_features, outputs):
             response = output.outputs[0].text.strip()
@@ -278,11 +225,12 @@ def process_explanation_comparisons(llm: LLM, common_features: List[Dict]) -> Di
                     "delphi_explanation": feature["delphi_explanation"],
                 }
             )
+            if score != -1:
+                total_score += score
+                valid += 1
 
-            total_score += score
-
-        max_possible = len(common_features) * 2
-        average_score = total_score / len(common_features) if common_features else 0.0
+        max_possible = valid * 2
+        average_score = total_score / max_possible if valid > 0 else 0.0
 
         print(f"Completed batch processing of {len(common_features)} comparisons")
 
@@ -295,29 +243,7 @@ def process_explanation_comparisons(llm: LLM, common_features: List[Dict]) -> Di
 
     except Exception as e:
         print(f"Error during batch LLM comparison: {e}")
-        # Return default scores for all features
-        individual_scores = []
-        for feature in common_features:
-            individual_scores.append(
-                {
-                    "layer_feature_id": feature["layer_feature_id"],
-                    "score": 2,  # Default middle score
-                    "rationale": "Error during LLM comparison",
-                    "neuronpedia_explanation": feature["neuronpedia_explanation"],
-                    "delphi_explanation": feature["delphi_explanation"],
-                }
-            )
-
-        total_score = len(common_features) * 2
-        max_possible = len(common_features) * 3
-        average_score = 2.0
-
-        return {
-            "total_score": total_score,
-            "max_possible": max_possible,
-            "average_score": average_score,
-            "individual_scores": individual_scores,
-        }
+        return None
 
 
 def compare_features(
@@ -665,9 +591,7 @@ def main():
     )
     parser.add_argument("neuronpedia_file", help="Path to Neuronpedia graph JSON file")
     parser.add_argument("delphi_file", help="Path to Delphi explanations JSONL file")
-    parser.add_argument(
-        "--output", default="results", help="Output directory path (default: results)"
-    )
+    parser.add_argument("--output", help="Output directory path (default: results)")
     parser.add_argument(
         "--compare",
         action="store_true",
@@ -675,7 +599,7 @@ def main():
     )
     parser.add_argument(
         "--model",
-        default="meta-llama/Llama-3.1-8B-Instruct",
+        default="google/gemma-3-12b-it",
         help="Model to use for comparison (default: meta-llama/Llama-3.1-8B-Instruct)",
     )
 
@@ -696,11 +620,10 @@ def main():
     if args.compare:
         print("Setting up VLLM for explanation comparison...")
         llm = setup_vllm_client(args.model)
-
-        if llm:
-            llm_results = process_explanation_comparisons(
-                llm, comparison_data["common_features"]
-            )
+        llm_results = process_explanation_comparisons(
+            llm, comparison_data["common_features"]
+        )
+        if llm_results:
             comparison_data["llm_comparison"] = llm_results
 
             # Merge LLM scores and rationales back into common_features
@@ -723,23 +646,24 @@ def main():
                 f"{llm_results['max_possible']}"
             )
             print(f"  Average Score: {llm_results['average_score']:.2f}")
-        else:
-            print("Failed to initialize VLLM - skipping explanation comparison")
 
     print("Saving results...")
     # Create output directory if it doesn't exist
-    Path(args.output).mkdir(parents=True, exist_ok=True)
+    output_dir = Path(args.delphi_file).parent
+    if args.output:
+        output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Save JSON output
-    with open(f"{args.output}/comparison_results.json", "w") as f:
+    with open(f"{output_dir}/comparison_results.json", "w") as f:
         json.dump(comparison_data, f, indent=2)
 
     # Create HTML table
-    create_html_table(comparison_data, f"{args.output}/comparison_table.html")
+    create_html_table(comparison_data, f"{output_dir}/comparison_table.html")
 
     print("\nResults saved to:")
-    print(f"  JSON: {args.output}/comparison_results.json")
-    print(f"  HTML: {args.output}/comparison_table.html")
+    print(f"  JSON: {output_dir}/comparison_results.json")
+    print(f"  HTML: {output_dir}/comparison_table.html")
 
     print("\nSummary:")
     print(f"  Common features: {comparison_data['summary']['common_features']}")

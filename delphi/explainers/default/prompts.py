@@ -58,55 +58,35 @@ To better find the explanation for the language patterns go through the followin
 2. Write down general shared latents of the text examples. This could be related to the full sentence or to the words surrounding the marked words.
 
 3. Formulate an hypothesis and write down the final explanation using [EXPLANATION]:.
-
-"""
-SYSTEM_GRAPH = """You are a meticulous multi-lingual researcher conducting an important investigation into patterns found in language.
-### Task:
-Your task is to analyze text and provide an explanation that thoroughly encapsulates possible patterns found in it.
-
-### Inputs:
-You will be given a list of text examples on which special words are selected and between delimiters like <<this>>.
-How important each token is for the behavior is listed after each example in parentheses.
-You will also be given additional information that can help you understand the patterns better, such as:
-{graph_prompt}
-{parent_explanations}
-{top_logits}
-{bot_logits}
-
-### Required Output:
-- Analyze text and provide an explanation that encapsulates possible patterns found in it.
-- The explanation must be **10 words or less**
-- The **explanation must be specific in order to be helpful**, at the cost of not covering all examples.
-- Do not mention the marker tokens (<< >>) in your explanation.
-- The last line of your response must be the formatted explanation, using [EXPLANATION]:
-{cot}
 """
 
-GRAPH_COT = """
-### Guidelines
-To better find the explanation for the language patterns, please think step by step using these instructions:
-1a. Come up with an initial hypothesis which summarizes the special words in the example.
-1b. Sometimes, the pattern appears before or after the special word. For example an explanation could be "preceeds a comma"
-2. Look at the prompt and parent explanations to see if there is a recurring theme or a more specific explanation that fits the examples.
-3. Look at the top and bottom logits provided. If they all seem to be related to each other, then consider this information. Otherwise, ignore it.
-4. Turn the initial general hypothesis into a more specific one if the additional information suggests it.
-5. Write down the final explanation using [EXPLANATION]:
-"""
+SYSTEM_GRAPH = """You are explaining the behavior of a neuron in a neural network. You will be graded on the quality of your explanation in terms of simplicity and accuracy. Do not make mistakes and follow all instructions carefully.
+### Instructions
+Your response should be a very concise explanation that captures what the neuron detects or predicts by finding patterns in lists:
+    - The explanation should be specific. For example, "unique words" is not a specific enough pattern, nor is "foreign words"
+    - The explanation can contain multiple different elements if one pattern is not sufficient to cover all examples. Remember to use only a few words to describe each one
+    - There will be a few examples in each of the provided lists that are irrelevant to the true explanation and should be discarded when looking for the pattern. You must cut through the noise.
 
-TOP_LOGITS = """
-- A list of the top ten tokens this pattern wants to PROMOTE."""
-BOT_LOGITS = """
-- A list of the top ten tokens this pattern wants to SUPRESS."""
-GRAPH_PROMPT = """
-- The prompt which caused this feature to activate
-    - If the examples show this feature activating on many types of instances of a general concept, and the prompt indicates one of these instances to be relevant, simplify the explanation to something relevant to the prompt.
-    - For example, if the current examples include highlighted words like  "football, soccer, tennis, basketball" and the prompt has "michael jordan", then the explanation should be "basketball and other sports terms"
-"""
+To explain the neuron, try all methods and then go back to a previous method that works best. The methods are listed in order of probability of being correct, but does not mean you should always choose method 1.
+    - Method 1: Look at MAX_ACTIVATING_TOKENS. If they share something specific in common, or are all the same token or a variation of the same token (like different cases or conjugations), respond with that token
+    - Method 2: Look at TOKENS_AFTER_MAX_ACTIVATING_TOKEN. Try to find a specific pattern or similarity in all the tokens. A common pattern is that they all start with the same letter.
+    - Method 3: Look at TOP_POSITIVE_LOGITS for similarities.
+    - Method 4: Look at TOP_NEGATIVE_LOGITS for similarities.
 
-PARENT_NODE_PROMPT = """
-- A list of explanations of features related to this feature.
-    - This relationship is quantified with a strength value and be should be considered accordingly.
-    - For example, if the current examples include highlighted words like "dog, building, tree, playground" and there is a connection to a feature called "pets" with strength 0.8, then this feature is probably detecting dogs.
+To further refine your explanation, follow these guidelines:
+    - Do not add unnecessary phrases like "words related to", "concepts related to", or "variations of the word"
+    - Do not mention "tokens" or "patterns" or the method used in your explanation
+    - Look at the GRAPH_PROMPT for additional context. Since there may be multiple possible explanations, use the GRAPH_PROMPT to narrow it down.
+
+Follow these instructions step by step and then produce the response in the format specified below. Please use square brackets as specified in the format to help the grader score your answer.
+Format:
+Method 1: <Plausible explanation using this method and rationale for whether it is the best or insufficient>
+Method 2: <Plausible explanation using this method and rationale for whether it is the best or insufficient>
+Method 3: <Plausible explanation using this method and rationale for whether it is the best or insufficient>
+Method 4: <Plausible explanation using this method and rationale for whether it is the best or insufficient>
+Answer:
+[SELECTED METHOD] <The method number you chose>
+[EXPLANATION] <Your final refined explanation>
 """
 
 ### EXAMPLE 1 ###
