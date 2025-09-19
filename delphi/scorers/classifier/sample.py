@@ -1,6 +1,8 @@
 import random
+from collections import deque
 from dataclasses import dataclass
-from typing import NamedTuple
+from itertools import groupby
+from typing import Callable, NamedTuple
 
 import torch
 
@@ -88,73 +90,95 @@ def _prepare_text(
     threshold: float,
     highlighted: bool,
 ) -> tuple[str, list[str]]:
+    assert n_incorrect >= 0, (
+        "n_incorrect must be 0 if highlighting correct example "
+        "or positive if creating false positives. "
+        f"Got {n_incorrect}"
+    )
+
     str_toks = example.str_tokens
     assert str_toks is not None, "str_toks were not set"
-    clean = "".join(str_toks)
+
     # Just return text if there's no highlighting
     if not highlighted:
+        clean = "".join(str_toks)
+
         return clean, str_toks
 
-    threshold = threshold * example.max_activation
+    abs_threshold = threshold * example.max_activation
 
     # Highlight tokens with activations above threshold
     # if correct example
     if n_incorrect == 0:
 
-        def threshold_check(i):
-            return example.activations[i] >= threshold
+        def is_above_activation_threshold(i: int) -> bool:
+            return example.activations[i] >= abs_threshold
 
-        return _highlight(str_toks, threshold_check), str_toks
+        return _highlight(str_toks, is_above_activation_threshold), str_toks
 
     # Highlight n_incorrect tokens with activations
     # below threshold if incorrect example
-    below_threshold = torch.nonzero(example.activations <= threshold).squeeze()
+    tokens_below_threshold = torch.nonzero(
+        example.activations <= abs_threshold
+    ).squeeze()
 
     # Rare case where there are no tokens below threshold
-    if below_threshold.dim() == 0:
-        logger.error("Failed to prepare example.")
+    if tokens_below_threshold.dim() == 0:
+        logger.error(
+            f"Tried to prepare false-positive example with {n_incorrect} tokens "
+            "incorrectly highlighted, but no tokens were below activation threshold."
+        )
         return DEFAULT_MESSAGE, str_toks
 
     random.seed(22)
 
-    n_incorrect = min(n_incorrect, len(below_threshold))
+    num_tokens_to_highlight = min(n_incorrect, tokens_below_threshold.shape[0])
 
     # The activating token is always ctx_len - ctx_len//4
-    # so we always highlight this one, and if  n_incorrect > 1
-    # we highlight n_incorrect-1 random ones
+    # so we always highlight this one, and if num_tokens_to_highlight > 1
+    # we highlight num_tokens_to_highlight - 1 random ones
     token_pos = len(str_toks) - len(str_toks) // 4
-    if token_pos in below_threshold:
+    if token_pos in tokens_below_threshold:
         random_indices = [token_pos]
-        if n_incorrect > 1:
+
+        num_remaining_tokens_to_highlight = num_tokens_to_highlight - 1
+        if num_remaining_tokens_to_highlight > 0:
+            remaining_tokens_below_threshold = tokens_below_threshold.tolist()
+            remaining_tokens_below_threshold.remove(token_pos)
+
             random_indices.extend(
-                random.sample(below_threshold.tolist(), n_incorrect - 1)
+                random.sample(
+                    remaining_tokens_below_threshold,
+                    num_remaining_tokens_to_highlight,
+                )
             )
     else:
-        random_indices = random.sample(below_threshold.tolist(), n_incorrect)
+        random_indices = random.sample(
+            tokens_below_threshold.tolist(), num_tokens_to_highlight
+        )
 
     random_indices = set(random_indices)
 
-    def check(i):
+    def is_false_positive(i):
         return i in random_indices
 
-    return _highlight(str_toks, check), str_toks
+    return _highlight(str_toks, is_false_positive), str_toks
 
 
-def _highlight(tokens, check):
-    result = []
+def _highlight(tokens: list[str], check: Callable[[int], bool]) -> str:
+    result: deque[str] = deque()
 
-    i = 0
-    while i < len(tokens):
-        if check(i):
-            result.append(L)
+    tokens_grouped_by_check_fn = groupby(
+        enumerate(tokens), key=lambda item: check(item[0])
+    )
 
-            while i < len(tokens) and check(i):
-                result.append(tokens[i])
-                i += 1
+    for should_highlight, token_group in tokens_grouped_by_check_fn:
+        highlighted_tokens = deque(token for _token_index, token in token_group)
 
-            result.append(R)
-        else:
-            result.append(tokens[i])
-            i += 1
+        if should_highlight:
+            highlighted_tokens.appendleft(L)
+            highlighted_tokens.append(R)
+
+        result.extend(highlighted_tokens)
 
     return "".join(result)

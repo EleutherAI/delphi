@@ -161,8 +161,9 @@ class Pipeline:
         async with semaphore:
             result = item
             for pipe in self.pipes:
-                if result is not None:
-                    result = await pipe(result)
-                else:
-                    pass
+                if result is None:
+                    break
+
+                result = await pipe(result)
+
         return result
