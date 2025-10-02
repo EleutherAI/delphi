@@ -275,7 +275,7 @@ class IntruderScorer(Classifier):
         """
 
         examples = "\n".join(
-            f"Example {i}: {example}" for i, example in enumerate(sample.examples)
+            f"Example {i}:{example}" for i, example in enumerate(sample.examples)
         )
 
         return self.prompt(examples=examples)
@@ -319,7 +319,6 @@ class IntruderScorer(Classifier):
             # default result is a error
             return IntruderResult()
         else:
-
             try:
                 interpretation, prediction = self._parse(response.text)
             except Exception as e:

@@ -91,6 +91,7 @@ def _prepare_text(
     str_toks = example.str_tokens
     assert str_toks is not None, "str_toks were not set"
     clean = "".join(str_toks)
+
     # Just return text if there's no highlighting
     if not highlighted:
         return clean, str_toks
@@ -125,9 +126,17 @@ def _prepare_text(
     token_pos = len(str_toks) - len(str_toks) // 4
     if token_pos in below_threshold:
         random_indices = [token_pos]
-        if n_incorrect > 1:
+
+        num_remaining_tokens_to_highlight = n_incorrect - 1
+        if num_remaining_tokens_to_highlight > 0:
+            remaining_tokens_below_threshold = below_threshold.tolist()
+            remaining_tokens_below_threshold.remove(token_pos)
+
             random_indices.extend(
-                random.sample(below_threshold.tolist(), n_incorrect - 1)
+                random.sample(
+                    remaining_tokens_below_threshold,
+                    num_remaining_tokens_to_highlight,
+                )
             )
     else:
         random_indices = random.sample(below_threshold.tolist(), n_incorrect)
