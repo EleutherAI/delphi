@@ -1,7 +1,6 @@
 import asyncio
 import re
 from dataclasses import dataclass
-from itertools import cycle, groupby
 from typing import Literal
 
 from beartype.typing import Sequence
@@ -9,7 +8,8 @@ from beartype.typing import Sequence
 from delphi import logger
 
 from ...clients.client import Client
-from ...latents import ActivatingExample, Example, LatentRecord, NonActivatingExample
+from ...latents import (ActivatingExample, Example, LatentRecord,
+                        NonActivatingExample)
 from .classifier import Classifier, ScorerResult
 from .prompts.intruder_prompt import prompt as intruder_prompt
 from .sample import _prepare_text
@@ -137,15 +137,12 @@ class IntruderScorer(Classifier):
         """
         Get the quantiled examples.
         """
-        examples_sorted_by_quantile = sorted(examples, key=lambda x: x.quantile)
-        examples_grouped_by_quantile = groupby(
-            examples_sorted_by_quantile, key=lambda x: x.quantile
-        )
-
-        return {
-            quantile: list(examples)
-            for quantile, examples in examples_grouped_by_quantile
-        }
+        quantiles = {}
+        for example in examples:
+            if example.quantile not in quantiles:
+                quantiles[example.quantile] = []
+            quantiles[example.quantile].append(example)
+        return quantiles
 
     def _prepare_and_batch(self, record: LatentRecord) -> list[IntruderSentence]:
         """
@@ -157,37 +154,38 @@ class IntruderScorer(Classifier):
         quantiled_intruder_sentences = self._get_quantiled_examples(record.test)
 
         intruder_sentences = record.not_active
+        for i, intruder in enumerate(intruder_sentences):
+            # select each quantile equally
+            quantile_index = i % len(quantiled_intruder_sentences.keys())
 
-        # select each quantile equally by repeatedly cycling through them
-        quantile_iterator = cycle(quantiled_intruder_sentences.items())
-        for (active_quantile, all_active_examples), intruder in zip(
-            quantile_iterator, intruder_sentences
-        ):
+            active_examples = quantiled_intruder_sentences[quantile_index]
             # if there are more examples than the number of examples to show,
             # sample which examples to show
-            num_active_examples = min(
-                self.n_examples_shown - 1, len(all_active_examples)
+            examples_to_show = min(self.n_examples_shown - 1, len(active_examples))
+            example_indices = self.rng.sample(
+                range(len(active_examples)), examples_to_show
             )
-            active_examples = self.rng.sample(all_active_examples, num_active_examples)
+            active_examples = [active_examples[i] for i in example_indices]
 
-            # highlights the active tokens with <<>> markers
-            examples = []
-            num_active_tokens = 0
+            # convert the examples to strings
+
+            # highlights the active tokens
+            majority_examples = []
+            active_tokens = 0
             for example in active_examples:
-                text, _str_tokens = _prepare_text(
+                text, _ = _prepare_text(
                     example, n_incorrect=0, threshold=0.3, highlighted=True
                 )
-                examples.append(text)
-                num_active_tokens += (example.activations > 0).sum().item()
-
-            avg_active_tokens_per_example = num_active_tokens // len(active_examples)
+                majority_examples.append(text)
+                active_tokens += (example.activations > 0).sum().item()
+            active_tokens = int(active_tokens / len(active_examples))
             if self.type == "default":
                 # if example is contrastive, use the active tokens
                 # otherwise use the non-activating tokens
                 if intruder.activations.max() > 0:
                     n_incorrect = 0
                 else:
-                    n_incorrect = avg_active_tokens_per_example
+                    n_incorrect = active_tokens
                 intruder_sentence, _ = _prepare_text(
                     intruder,
                     n_incorrect=n_incorrect,
@@ -197,15 +195,22 @@ class IntruderScorer(Classifier):
             elif self.type == "internal":
                 # randomly select a quantile to be the intruder, make sure it's not
                 # the same as the source quantile
-                all_quantile_examples = list(quantiled_intruder_sentences.values())
-                all_quantile_examples.remove(all_active_examples)
-                possible_intruder_sentences = self.rng.choice(all_quantile_examples)
-
-                intruder = self.rng.choice(possible_intruder_sentences)
+                intruder_quantile_index = self.rng.randint(
+                    0, len(quantiled_intruder_sentences.keys()) - 1
+                )
+                while intruder_quantile_index == quantile_index:
+                    intruder_quantile_index = self.rng.randint(
+                        0, len(quantiled_intruder_sentences.keys()) - 1
+                    )
+                posible_intruder_sentences = quantiled_intruder_sentences[
+                    intruder_quantile_index
+                ]
+                intruder_index_selected = self.rng.randint(
+                    0, len(posible_intruder_sentences) - 1
+                )
+                intruder = posible_intruder_sentences[intruder_index_selected]
                 # here the examples are activating, so we have to convert them
                 # to non-activating examples
-                assert intruder.str_tokens is not None, "intruder has no str_tokens"
-
                 non_activating_intruder = NonActivatingExample(
                     tokens=intruder.tokens,
                     activations=intruder.activations,
@@ -222,19 +227,21 @@ class IntruderScorer(Classifier):
                 intruder = non_activating_intruder
 
             # select a random index to insert the intruder sentence
-            intruder_index = self.rng.randint(0, num_active_examples)
-            examples.insert(intruder_index, intruder_sentence)
+            intruder_index = self.rng.randint(0, examples_to_show)
+            majority_examples.insert(intruder_index, intruder_sentence)
 
-            example_activations = [example.activations.tolist() for example in examples]
-            example_tokens = [example.str_tokens for example in examples]
+            activations = [example.activations.tolist() for example in active_examples]
+            tokens = [example.str_tokens for example in active_examples]
+            activations.insert(intruder_index, intruder.activations.tolist())
+            tokens.insert(intruder_index, intruder.str_tokens)
 
             batches.append(
                 IntruderSentence(
-                    examples=examples,
+                    examples=majority_examples,
                     intruder_index=intruder_index,
-                    chosen_quantile=active_quantile,
-                    activations=example_activations,
-                    tokens=example_tokens,
+                    chosen_quantile=quantile_index,
+                    activations=activations,
+                    tokens=tokens,
                     intruder_distance=intruder.distance,
                 )
             )
@@ -305,11 +312,20 @@ class IntruderScorer(Classifier):
         prompt = self._build_prompt(sample)
         try:
             response = await self.client.generate(prompt, **self.generation_kwargs)
-            interpretation, prediction = self._parse(response.text)
         except Exception as e:
-            logger.error(str(e))
+            logger.error(f"Error generating text: {e}")
+            response = None
+
+        if response is None:
             # default result is a error
             return IntruderResult()
+        else:
+            try:
+                interpretation, prediction = self._parse(response.text)
+            except Exception as e:
+                logger.error(f"Parsing selections failed: {e}")
+                # default result is a error
+                return IntruderResult()
 
         # check that the only prediction is the intruder
         correct = prediction == sample.intruder_index
