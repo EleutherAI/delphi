@@ -8,8 +8,7 @@ from beartype.typing import Sequence
 from delphi import logger
 
 from ...clients.client import Client
-from ...latents import (ActivatingExample, Example, LatentRecord,
-                        NonActivatingExample)
+from ...latents import ActivatingExample, Example, LatentRecord, NonActivatingExample
 from .classifier import Classifier, ScorerResult
 from .prompts.intruder_prompt import prompt as intruder_prompt
 from .sample import _prepare_text
