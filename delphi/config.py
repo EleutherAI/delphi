@@ -191,6 +191,11 @@ class RunConfig(Serializable):
     )
     """Number of GPUs to use for explanation and scoring."""
 
+    max_memory: float = field(
+        default=0.9,
+    )
+    """Fraction of GPU memory to allocate to running explainer model."""
+
     seed: int = field(
         default=22,
     )
