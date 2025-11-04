@@ -104,6 +104,8 @@ class JumpReluSae(nn.Module):
         pt_params = {k: torch.from_numpy(v) for k, v in params.items()}
         model = cls(params["W_enc"].shape[0], params["W_enc"].shape[1])
         model.load_state_dict(pt_params)
-        if device == "cuda":
+        if device == "cuda" or (
+            isinstance(device, torch.device) and device.type == "cuda"
+        ):
             model.cuda()
         return model
