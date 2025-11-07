@@ -160,6 +160,10 @@ class RunConfig(Serializable):
     )
     """Scorer methods to score latent explanations. Options are 'fuzz', 'detection', and
     'simulation'."""
+    fuzz_type: Literal["default", "active"] = "default"
+    """Type of fuzzing to use for the fuzz scorer. Default uses non-activating
+    examples and highlights n_incorrect tokens. Active uses activating examples
+    and highlights non-activating tokens."""
 
     name: str = ""
     """The name of the run. Results are saved in a directory with this name."""

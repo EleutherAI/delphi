@@ -256,6 +256,7 @@ async def process_cache(
                 n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
                 verbose=run_cfg.verbose,
                 log_prob=run_cfg.log_probs,
+                fuzz_type=run_cfg.fuzz_type,
             )
         elif scorer_name == "detection":
             scorer = DetectionScorer(
