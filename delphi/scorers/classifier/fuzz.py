@@ -38,6 +38,10 @@ class FuzzingScorer(Classifier, Scorer):
                         it harder for models to generate anwers in the correct format.
             log_prob: Whether to use log probabilities to allow for AUC calculation.
             generation_kwargs: Additional generation kwargs.
+            temperature: Which temperature to use for the scorer model.
+            fuzz_type: Which type of fuzzing to use. Default uses non-activating
+                examples and highlights n_incorrect tokens. Active uses activating
+                examples and highlights non-activating tokens.
         """
         super().__init__(
             client=client,
