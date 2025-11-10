@@ -64,12 +64,12 @@ class EmbeddingScorer(Scorer):
         samples = []
 
         assert (
-            record.extra_examples is not None
-        ), "Extra (non-activating) examples need to be provided"
+            record.not_active is not None
+        ), "Non-activating examples need to be provided"
 
         samples.extend(
             examples_to_samples(
-                record.extra_examples,
+                record.not_active,
             )
         )
 
