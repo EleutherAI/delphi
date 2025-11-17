@@ -5,7 +5,9 @@ from .embedding.embedding import EmbeddingScorer
 from .embedding.example_embedding import ExampleEmbeddingScorer
 from .intervention.surprisal_intervention_scorer import SurprisalInterventionScorer
 from .scorer import Scorer
-from .simulator.oai_simulator import OpenAISimulator
+from .simulator.simulation.oai_simulator import (
+    RefactoredOpenAISimulator as OpenAISimulator,
+)
 from .surprisal.surprisal import SurprisalScorer
 
 __all__ = [

@@ -1,6 +1,36 @@
 # CHANGELOG
 
 
+## v0.1.1 (2025-08-27)
+
+### Bug Fixes
+
+- Make simulator workable
+  ([`0ceaa10`](https://github.com/EleutherAI/delphi/commit/0ceaa10bd7b1b7beb411c488ff348c06fb868a67))
+
+* bump vllm dependency to latest
+
+* change simulation scoring default to all at once for local models
+
+* use Role class instead of hardcoding
+
+* delete old oai simulator scorer
+
+* refactor
+
+* [pre-commit.ci] auto fixes from pre-commit.com hooks
+
+for more information, see https://pre-commit.ci
+
+* linter fix
+
+* replace lambda with function
+
+---------
+
+Co-authored-by: pre-commit-ci[bot] <66853113+pre-commit-ci[bot]@users.noreply.github.com>
+
+
 ## v0.1.0 (2025-06-17)
 
 ### Features

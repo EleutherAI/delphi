@@ -152,7 +152,7 @@ async def process_cache(
     if run_cfg.explainer_provider == "offline":
         llm_client = Offline(
             run_cfg.explainer_model,
-            max_memory=0.9,
+            max_memory=run_cfg.max_memory,
             # Explainer models context length - must be able to accommodate the longest
             # set of examples
             max_model_len=run_cfg.explainer_model_max_len,
@@ -262,13 +262,21 @@ async def process_cache(
         scorer_path.mkdir(parents=True, exist_ok=True)
 
         if scorer_name == "simulation":
-            scorer = OpenAISimulator(llm_client, tokenizer=tokenizer, all_at_once=False)
+            if isinstance(llm_client, Offline):
+                scorer = OpenAISimulator(
+                    llm_client, tokenizer=tokenizer, all_at_once=True
+                )
+            else:
+                scorer = OpenAISimulator(
+                    llm_client, tokenizer=tokenizer, all_at_once=False
+                )
         elif scorer_name == "fuzz":
             scorer = FuzzingScorer(
                 llm_client,
                 n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
                 verbose=run_cfg.verbose,
                 log_prob=run_cfg.log_probs,
+                fuzz_type=run_cfg.fuzz_type,
             )
         elif scorer_name == "detection":
             scorer = DetectionScorer(

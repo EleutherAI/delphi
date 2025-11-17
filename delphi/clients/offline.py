@@ -11,6 +11,7 @@ from vllm.distributed.parallel_state import (
     destroy_distributed_environment,
     destroy_model_parallel,
 )
+from vllm.inputs import TokensPrompt
 
 from delphi import logger
 
@@ -103,6 +104,7 @@ class Offline(Client):
             prompt = self.tokenizer.apply_chat_template(
                 batch, add_generation_prompt=True, tokenize=True
             )
+            prompt = TokensPrompt(prompt_token_ids=prompt)
             prompts.append(prompt)
             if self.statistics:
                 non_cached_tokens = len(
@@ -121,7 +123,7 @@ class Offline(Client):
             None,
             partial(
                 self.client.generate,  # type: ignore
-                prompt_token_ids=prompts,
+                prompts,
                 sampling_params=self.sampling_params,
                 use_tqdm=False,
             ),

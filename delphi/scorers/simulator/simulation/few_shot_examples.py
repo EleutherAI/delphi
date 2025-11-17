@@ -1,4 +1,4 @@
-# Few-shot examples for generating and simulating neuron explanations.
+"""Few-shot examples for generating and simulating neuron explanations."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Optional
 
 from simple_parsing import Serializable
 
-from ..activations.activations import ActivationRecord
+from .data_models import ActivationRecord
 
 
 @dataclass
@@ -41,7 +41,6 @@ class FewShotExampleSet(Enum):
     ORIGINAL = "original"
     NEWER = "newer"
     TEST = "test"
-    JL_FINE_TUNED = "jl_fine_tuned"
 
     @classmethod
     def from_string(cls, string: str) -> FewShotExampleSet:
@@ -58,8 +57,6 @@ class FewShotExampleSet(Enum):
             return NEWER_EXAMPLES
         elif self is FewShotExampleSet.TEST:
             return TEST_EXAMPLES
-        elif self is FewShotExampleSet.JL_FINE_TUNED:
-            return JL_FINE_TUNED_EXAMPLES
         else:
             raise ValueError(f"Unhandled example set: {self}")
 
@@ -628,95 +625,8 @@ NEWER_EXAMPLES = [
                 ],
                 quantile=1,
             ),
-            # We sometimes exceed the max context size when this is included :(
-            # ActivationRecord(
-            #     tokens=[
-            #         " We",
-            #         " are",
-            #         " proud",
-            #         " of",
-            #         " our",
-            #         " national",
-            #         " achievements",
-            #         " in",
-            #         " mastering",
-            #         " all",
-            #         " aspects",
-            #         " of",
-            #         " the",
-            #         " fuel",
-            #         " cycle",
-            #         ".",
-            #         " The",
-            #         " current",
-            #         " international",
-            #         " interest",
-            #         " in",
-            #         " closing",
-            #         " the",
-            #         " fuel",
-            #         " cycle",
-            #         " is",
-            #         " a",
-            #         " vind",
-            #         "ication",
-            #         " of",
-            #         " Dr",
-            #         ".",
-            #         " B",
-            #         "hab",
-            #         "ha",
-            #         "’s",
-            #         " pioneering",
-            #         " vision",
-            #         " and",
-            #         " genius",
-            #     ],
-            #     activations=[
-            #         -0,
-            #         -0,
-            #         0,
-            #         -0,
-            #         -0,
-            #         0,
-            #         0,
-            #         0,
-            #         -0,
-            #         0,
-            #         0,
-            #         -0,
-            #         0,
-            #         -0.01,
-            #         0,
-            #         0,
-            #         -0,
-            #         -0,
-            #         0,
-            #         0,
-            #         0,
-            #         -0,
-            #         -0,
-            #         -0.01,
-            #         0,
-            #         0,
-            #         -0,
-            #         0,
-            #         0,
-            #         0,
-            #         0,
-            #         0,
-            #         -0,
-            #         0,
-            #         0,
-            #         0,
-            #         2.15,
-            #         0,
-            #         0,
-            #         0.03,
-            #     ],
-            # ),
         ],
-        first_revealed_activation_indices=[7],  # , 19],
+        first_revealed_activation_indices=[7],
         explanation="language related to something being groundbreaking",
     ),
     Example(
@@ -993,154 +903,10 @@ NEWER_EXAMPLES = [
             ),
         ],
         first_revealed_activation_indices=[2, 8],
-        explanation="the word “variant” and other words with the same ”vari” root",
+        explanation='the word "variant" and other words with the same "vari" root',
     ),
 ]
 
-
-NEWER_SINGLE_TOKEN_EXAMPLE = Example(
-    activation_records=[
-        ActivationRecord(
-            tokens=[
-                "B",
-                "10",
-                " ",
-                "111",
-                " MON",
-                "DAY",
-                ",",
-                " F",
-                "EB",
-                "RU",
-                "ARY",
-                " ",
-                "11",
-                ",",
-                " ",
-                "201",
-                "9",
-                " DON",
-                "ATE",
-                "fake higher scoring token",  # See below.
-            ],
-            activations=[
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0.37,
-                # This fake activation makes the previous token's activation normalize
-                # to 8, which might help address overconfidence in "10" activations
-                # for the one-token-at-a-time scoring prompt. This value and the
-                # associated token don't actually appear anywhere in the prompt.
-                0.45,
-            ],
-            quantile=1,
-        ),
-    ],
-    first_revealed_activation_indices=[],
-    token_index_to_score=18,
-    explanation="instances of the token 'ate' as part of another word",
-)
-
-
-JL_FINE_TUNED_EXAMPLES = [
-    Example(
-        activation_records=[
-            ActivationRecord(
-                tokens=[
-                    "The",
-                    " cat",
-                    " jumped",
-                    " on",
-                    " my",
-                    " laptop",
-                    ".",
-                ],
-                activations=[0, 0, 0, 0, 0, 0, 0],
-                quantile=-1,
-            ),
-        ],
-        first_revealed_activation_indices=[],
-        explanation='the word "laptop" before the word "cat"',
-    ),
-    Example(
-        activation_records=[
-            ActivationRecord(
-                tokens=[
-                    "The",
-                    " cat",
-                    " jumped",
-                    " on",
-                    " my",
-                    " laptop",
-                    ".",
-                ],
-                activations=[0, 10, 0, 0, 0, 0, 0],
-                quantile=1,
-            ),
-        ],
-        first_revealed_activation_indices=[],
-        explanation='the word "cat" before the word "laptop"',
-    ),
-    Example(
-        activation_records=[
-            ActivationRecord(
-                tokens=[
-                    "I",
-                    " am",
-                    " using",
-                    " a",
-                    " keyboard",
-                    ".",
-                ],
-                activations=[0, 0, 0, 0, 10, 0],
-                quantile=1,
-            ),
-        ],
-        first_revealed_activation_indices=[],
-        explanation="the word before a period",
-    ),
-    Example(
-        activation_records=[
-            ActivationRecord(
-                tokens=[
-                    "The",
-                    " sun",
-                    " is",
-                    " shining",
-                    ".",
-                    " The",
-                    " clouds",
-                    " are",
-                    " gone",
-                    ".",
-                    " Great",
-                    " weather",
-                    "!",
-                ],
-                activations=[0, 0, 0, 10, 0, 0, 0, 0, 10, 0, 0, 0, 0],
-                quantile=1,
-            ),
-        ],
-        first_revealed_activation_indices=[],
-        explanation="the word before period",
-    ),
-]
 
 NEWER_SINGLE_TOKEN_EXAMPLE = Example(
     activation_records=[
