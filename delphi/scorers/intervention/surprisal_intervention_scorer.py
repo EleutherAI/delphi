@@ -168,25 +168,22 @@ class SurprisalInterventionScorer(Scorer):
         """
         Calculates the feature's decoder vector, subtracting the decoder bias.
         """
-        
-        
+
         d_latent = sae.encoder.out_features
         sae_device = sae.encoder.weight.device
 
         # Create a one-hot activation for our single feature.
         one_hot_activation = torch.zeros(1, 1, d_latent, device=sae_device)
-        
+
         if feature_id >= d_latent:
             print(f"""DEBUG: ERROR - Feature ID {feature_id} is out of bounds 
                   for d_latent {d_latent}""")
             return torch.zeros(1)
-            
+
         one_hot_activation[0, 0, feature_id] = 1.0
 
         # Create the corresponding indices needed for the decode method.
-        indices = torch.tensor(
-            [[[feature_id]]], device=sae_device, dtype=torch.long
-        )
+        indices = torch.tensor([[[feature_id]]], device=sae_device, dtype=torch.long)
 
         with torch.no_grad():
             try:
@@ -197,9 +194,9 @@ class SurprisalInterventionScorer(Scorer):
                 return torch.zeros(1)
 
             decoder_vector = vector_before_sub - decoded_zero
-        
+
         final_norm = decoder_vector.norm().item()
-        
+
         # --- MODIFIED DEBUG BLOCK ---
         # Only print if the feature is "decoder-live"
         if final_norm > 1e-6:
@@ -207,13 +204,14 @@ class SurprisalInterventionScorer(Scorer):
             print(f"DEBUG: sae.encoder.out_features (d_latent): {d_latent}")
             print(f"DEBUG: sae.encoder.weight.device (sae_device): {sae_device}")
             print(f"DEBUG: Norm of decoded_zero: {decoded_zero.norm().item()}")
-            print(f"DEBUG: Norm of vector_before_sub: {vector_before_sub.norm().item()}")
+            print(
+                f"DEBUG: Norm of vector_before_sub: {vector_before_sub.norm().item()}"
+            )
             print(f"DEBUG: Feature {feature_id}, FINAL Vector Norm: {final_norm}")
             print("--- END DEBUG ---\n")
         # --- END MODIFIED BLOCK ---
 
         return decoder_vector.squeeze()
-
 
     async def __call__(self, record: LatentRecord) -> ScorerResult:
 
@@ -241,7 +239,7 @@ class SurprisalInterventionScorer(Scorer):
         sae = self._get_sae_for_hookpoint(hookpoint_str, record_copy)
         if not sae:
             raise ValueError(f"Could not find SAE for hookpoint {hookpoint_str}")
-        
+
         intervention_vector = self._get_intervention_vector(sae, record_copy.feature_id)
 
         tuned_strength, initial_kl = await self._tune_strength(
@@ -254,10 +252,18 @@ class SurprisalInterventionScorer(Scorer):
 
         for prompt in truncated_prompts:
             clean_text, clean_logp_dist = await self._generate_with_intervention(
-                prompt, record_copy, strength=0.0, intervention_vector=intervention_vector, get_logp_dist=True
+                prompt,
+                record_copy,
+                strength=0.0,
+                intervention_vector=intervention_vector,
+                get_logp_dist=True,
             )
             int_text, int_logp_dist = await self._generate_with_intervention(
-                prompt, record_copy, strength=tuned_strength, intervention_vector=intervention_vector, get_logp_dist=True
+                prompt,
+                record_copy,
+                strength=tuned_strength,
+                intervention_vector=intervention_vector,
+                get_logp_dist=True,
             )
 
             logp_clean = await self._score_explanation(
@@ -301,7 +307,6 @@ class SurprisalInterventionScorer(Scorer):
             )
         return ScorerResult(record=record_copy, score=final_output_list)
 
-
     async def _get_latent_activations(
         self, prompt: str, record: LatentRecord
     ) -> torch.Tensor:
@@ -340,7 +345,6 @@ class SurprisalInterventionScorer(Scorer):
 
         return feature_acts[0, :, record.feature_id].cpu()
 
-
     async def _truncate_prompt(self, prompt: str, record: LatentRecord) -> str:
         """
         Truncates prompt to end just before the first token where latent activates.
@@ -357,17 +361,18 @@ class SurprisalInterventionScorer(Scorer):
         first_activation_idx = all_activation_indices[all_activation_indices > 0]
 
         if first_activation_idx.numel() > 0:
-            truncation_point = first_activation_idx[0].item() 
+            truncation_point = first_activation_idx[0].item()
             input_ids = self.tokenizer(prompt, return_tensors="pt").input_ids[0]
-            truncated_ids = input_ids[:truncation_point + 1]
+            truncated_ids = input_ids[: truncation_point + 1]
             return self.tokenizer.decode(truncated_ids, skip_special_tokens=True)
 
         return prompt
 
-
     async def _tune_strength(
-        self, prompts: List[str], record: LatentRecord, 
-        intervention_vector: torch.Tensor
+        self,
+        prompts: List[str],
+        record: LatentRecord,
+        intervention_vector: torch.Tensor,
     ) -> Tuple[float, float]:
         """
         Performs a binary search to find intervention strength that matches target_kl.
@@ -409,22 +414,26 @@ class SurprisalInterventionScorer(Scorer):
             best_strength = mid_strength
 
         # Return the best found strength and the corresponding KL
-        final_kl = await self._calculate_avg_kl(prompts, record, best_strength, intervention_vector)
+        final_kl = await self._calculate_avg_kl(
+            prompts, record, best_strength, intervention_vector
+        )
         return best_strength, final_kl
 
-
     async def _calculate_avg_kl(
-        self, prompts: List[str], record: LatentRecord, strength: float, 
-        intervention_vector: torch.Tensor
+        self,
+        prompts: List[str],
+        record: LatentRecord,
+        strength: float,
+        intervention_vector: torch.Tensor,
     ) -> float:
         total_kl = 0.0
         n = 0
         for prompt in prompts:
             _, clean_logp = await self._generate_with_intervention(
-                prompt, record, 0.0, intervention_vector,True
+                prompt, record, 0.0, intervention_vector, True
             )
             _, int_logp = await self._generate_with_intervention(
-                prompt, record, strength, intervention_vector,True
+                prompt, record, strength, intervention_vector, True
             )
             p_clean = torch.exp(clean_logp)
             kl_div = F.kl_div(
@@ -433,7 +442,6 @@ class SurprisalInterventionScorer(Scorer):
             total_kl += kl_div
             n += 1
         return total_kl / n if n > 0 else 0.0
-
 
     async def _generate_with_intervention(
         self,
@@ -474,8 +482,9 @@ class SurprisalInterventionScorer(Scorer):
                 intervention_start_index = prompt_length - 1
 
                 if current_seq_len >= prompt_length:
-                    new_hiddens[:, intervention_start_index:, :] += delta.to(original_dtype)
-
+                    new_hiddens[:, intervention_start_index:, :] += delta.to(
+                        original_dtype
+                    )
 
                 return (
                     (new_hiddens,) + out[1:] if isinstance(out, tuple) else new_hiddens
@@ -485,7 +494,7 @@ class SurprisalInterventionScorer(Scorer):
 
         try:
             with torch.no_grad():
-                outputs =self.subject_model(input_ids, attention_mask=attention_mask)
+                outputs = self.subject_model(input_ids, attention_mask=attention_mask)
                 next_token_logits = outputs.logits[0, -1, :]
                 log_probs_next_token = (
                     F.log_softmax(next_token_logits, dim=-1) if get_logp_dist else None
@@ -507,10 +516,9 @@ class SurprisalInterventionScorer(Scorer):
             log_probs_next_token.cpu() if get_logp_dist else torch.empty(0)
         )
 
- 
     async def _score_explanation(self, generated_text: str, explanation: str) -> float:
         """
-        Computes log P(explanation | generated_text) using the paper's 
+        Computes log P(explanation | generated_text) using the paper's
         prompt format.
         """
         device = self._get_device()
@@ -519,9 +527,9 @@ class SurprisalInterventionScorer(Scorer):
         prompt_template = (
             "<PASSAGE>\n"
             f"{generated_text}\n"
-            "The above passage contains an amplified amount of \""
+            'The above passage contains an amplified amount of "'
         )
-        explanation_suffix = f"{explanation}\""
+        explanation_suffix = f'{explanation}"'
 
         # Tokenize the parts
         context_enc = self.tokenizer(prompt_template, return_tensors="pt")
@@ -537,7 +545,7 @@ class SurprisalInterventionScorer(Scorer):
 
         # We only need to score the explanation part
         context_len = context_enc.input_ids.shape[1]
-        
+
         # Get logits for positions that predict the explanation tokens
         # Shape: [batch_size, explanation_len, vocab_size]
         explanation_logits = logits[:, context_len - 1 : -1, :]
@@ -549,13 +557,10 @@ class SurprisalInterventionScorer(Scorer):
         log_probs = F.log_softmax(explanation_logits, dim=-1)
 
         # Gather the log-probabilities of the actual explanation tokens
-        token_log_probs = log_probs.gather(
-            2, target_ids.unsqueeze(-1)
-        ).squeeze(-1)
+        token_log_probs = log_probs.gather(2, target_ids.unsqueeze(-1)).squeeze(-1)
 
         # Return the sum of log-probs for the explanation
         return token_log_probs.sum().item()
-
 
     def _get_sae_for_hookpoint(self, hookpoint_str: str, record: LatentRecord) -> Any:
         """
@@ -568,13 +573,13 @@ class SurprisalInterventionScorer(Scorer):
             candidate = record.sae
         elif self.explainer_model and isinstance(self.explainer_model, dict):
             full_key = self._get_full_hookpoint_path(hookpoint_str)
-            short_key = ".".join(hookpoint_str.split(".")[-2:]) # e.g., "layers.6.mlp"
+            short_key = ".".join(hookpoint_str.split(".")[-2:])  # e.g., "layers.6.mlp"
 
             for key in [hookpoint_str, full_key, short_key]:
                 if self.explainer_model.get(key) is not None:
                     candidate = self.explainer_model.get(key)
                     break
-        
+
         if candidate is None:
             # This will raise an error if the key isn't found
             raise ValueError(f"ERROR: Surprisal scorer could not find an SAE "
@@ -591,8 +596,9 @@ class SurprisalInterventionScorer(Scorer):
                     find the 'sae' keyword.
                     func: {candidate.func}
                     args: {candidate.args}
-                    keywords: {candidate.keywords}""")
-        
+                    keywords: {candidate.keywords}"""
+                )
+
         # This will raise an error if the candidate isn't a partial
         raise ValueError(f"""ERROR: Candidate for {hookpoint_str} was not a partial 
                         object, which was not expected. Type: {type(candidate)}""")
