@@ -176,8 +176,10 @@ class SurprisalInterventionScorer(Scorer):
         one_hot_activation = torch.zeros(1, 1, d_latent, device=sae_device)
 
         if feature_id >= d_latent:
-            print(f"""DEBUG: ERROR - Feature ID {feature_id} is out of bounds 
-                  for d_latent {d_latent}""")
+            print(
+                f"""DEBUG: ERROR - Feature ID {feature_id} is out of bounds
+                  for d_latent {d_latent}"""
+            )
             return torch.zeros(1)
 
         one_hot_activation[0, 0, feature_id] = 1.0
@@ -582,8 +584,10 @@ class SurprisalInterventionScorer(Scorer):
 
         if candidate is None:
             # This will raise an error if the key isn't found
-            raise ValueError(f"ERROR: Surprisal scorer could not find an SAE "
-                        f"for hookpoint '{hookpoint_str}' in self.explainer_model")
+            raise ValueError(
+                f"ERROR: Surprisal scorer could not find an SAE "
+                f"for hookpoint '{hookpoint_str}' in self.explainer_model"
+            )
 
         if isinstance(candidate, functools.partial):
             # As shown in load_sparsify.py, the SAE is in the 'sae' keyword.
@@ -591,7 +595,8 @@ class SurprisalInterventionScorer(Scorer):
                 return candidate.keywords["sae"]  # Unwrapped successfully
             else:
                 # This will raise an error if the partial is missing the keyword
-                raise ValueError(f"""ERROR: Found a partial for 
+                raise ValueError(
+                    f"""ERROR: Found a partial for
                     {hookpoint_str} but could not
                     find the 'sae' keyword.
                     func: {candidate.func}
@@ -600,8 +605,10 @@ class SurprisalInterventionScorer(Scorer):
                 )
 
         # This will raise an error if the candidate isn't a partial
-        raise ValueError(f"""ERROR: Candidate for {hookpoint_str} was not a partial 
-                        object, which was not expected. Type: {type(candidate)}""")
+        raise ValueError(
+            f"""ERROR: Candidate for {hookpoint_str} was not a partial
+                        object, which was not expected. Type: {type(candidate)}"""
+        )
 
     def _get_intervention_direction(self, record: LatentRecord) -> torch.Tensor:
         hookpoint_str = self.hookpoint_str or getattr(record, "hookpoint", None)
