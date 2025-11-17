@@ -461,7 +461,7 @@ class SurprisalInterventionScorer(Scorer):
             sae = self._get_sae_for_hookpoint(hookpoint_str, record)
             if not sae:
                 raise ValueError(
-                    f"Could not find a valid SAE for hookpoint {hookpoint_str}"
+                    f"Couldn't find a valid SAE for hookpoint {hookpoint_str}"
                 )
 
             def hook_fn(module, inp, out):
