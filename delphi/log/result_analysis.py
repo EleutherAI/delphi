@@ -173,7 +173,7 @@ def compute_confusion(df, threshold=0.5):
     return dict(true_positives=tp, true_negatives=tn, false_positives=fp, false_negatives=fn, total_positives=act.sum(), total_negatives=(~act).sum())
 
 def compute_classification_metrics(conf):
-    tp, tn, fp, fn = conf["true_positives"], conf["true_negatives"], conf["false_positives"], conf["false_negatives"]
+    tp, tn, fp, _ = conf["true_positives"], conf["true_negatives"], conf["false_positives"], conf["false_negatives"]
     pos, neg = conf["total_positives"], conf["total_negatives"]
     acc = ((tp/pos if pos else 0) + (tn/neg if neg else 0)) / 2
     prec = tp/(tp+fp) if (tp+fp) else 0
