@@ -9,15 +9,12 @@ import torch
 from sklearn.metrics import roc_auc_score, roc_curve
 
 
-# --- 1. NEW PLOTTING FUNCTIONS ---
 
 def plot_fuzz_vs_intervention(latent_df: pd.DataFrame, out_dir: Path, run_label: str):
     """
     Replicates the Scatter Plot from the paper (Figure 3/Appendix G).
     Plots Fuzz Score vs. Intervention Score for the same latents.
     """
-    # We need to merge the rows for 'fuzz' and 'surprisal_intervention'
-    # 1. Pivot the table so we have columns: 'latent_idx', 'fuzz_score', 'intervention_score'
     
     # Extract Fuzz Scores (using F1 or Accuracy as the metric)
     fuzz_df = latent_df[latent_df["score_type"] == "fuzz"].copy()
@@ -32,12 +29,10 @@ def plot_fuzz_vs_intervention(latent_df: pd.DataFrame, out_dir: Path, run_label:
     int_df = latent_df[latent_df["score_type"] == "surprisal_intervention"].copy()
     if int_df.empty: return
     
-    # Deduplicate intervention scores
     int_metrics = int_df.drop_duplicates(subset=["module", "latent_idx"])[
         ["module", "latent_idx", "avg_kl_divergence", "final_score"]
     ]
 
-    # Merge them
     merged = pd.merge(fuzz_metrics, int_metrics, on=["module", "latent_idx"])
     
     if merged.empty:
@@ -63,7 +58,8 @@ def plot_fuzz_vs_intervention(latent_df: pd.DataFrame, out_dir: Path, run_label:
         y="final_score",
         hover_data=["latent_idx"],
         title=f"Correlation vs. Causation (Score) - {run_label}",
-        labels={"fuzz_score": "Fuzzing Score (Correlation)", "final_score": "Intervention Score (Surprisal)"},
+        labels={"fuzz_score": "Fuzzing Score (Correlation)", 
+        "final_score": "Intervention Score (Surprisal)"},
         trendline="ols"
     )
     fig_score.write_image(out_dir / "scatter_fuzz_vs_score.pdf")
@@ -87,7 +83,6 @@ def plot_intervention_stats(df: pd.DataFrame, out_dir: Path, model_name: str):
     counts = df["status"].value_counts().reset_index()
     counts.columns = ["Status", "Count"]
     
-    # Get percentage
     total = counts["Count"].sum()
     live = counts[counts["Status"] == "Decoder-Live"]["Count"].sum() if "Decoder-Live" in counts["Status"].values else 0
     pct = (live / total * 100) if total > 0 else 0
@@ -99,7 +94,7 @@ def plot_intervention_stats(df: pd.DataFrame, out_dir: Path, model_name: str):
     )
     fig_bar.write_image(out_dir / "intervention_live_dead_split.pdf")
 
-    # 2. "Live Features Only" Histogram (The "Pretty" one)
+    # 2. "Live Features Only" Histogram
     live_df = df[df["avg_kl_divergence"] > threshold]
     if not live_df.empty:
         fig_live = px.histogram(
@@ -124,7 +119,6 @@ def plot_intervention_stats(df: pd.DataFrame, out_dir: Path, model_name: str):
     fig_all.write_image(out_dir / "intervention_kl_dist_log_scale.pdf")
 
 
-# --- 2. STANDARD PLOTTING HELPERS ---
 
 def plot_firing_vs_f1(latent_df, num_tokens, out_dir, run_label):
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -168,7 +162,6 @@ def plot_roc_curve(df, out_dir):
     fig.write_image(out_dir / "roc_curve.pdf")
 
 
-# --- 3. METRIC COMPUTATION ---
 
 def compute_confusion(df, threshold=0.5):
     df_valid = df[df["prediction"].notna()]
@@ -208,7 +201,6 @@ def add_latent_f1(df):
     return df.merge(f1s, on=["module", "latent_idx"])
 
 
-# --- 4. DATA LOADING ---
 
 def load_data(scores_path, modules):
     def parse_file(path):
@@ -248,7 +240,6 @@ def load_data(scores_path, modules):
     return (pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()), counts
 
 
-# --- 5. MAIN LOGIC ---
 
 def log_results(scores_path: Path, viz_path: Path, modules: list[str], scorer_names: list[str], model_name: str = "Unknown"):
     import_plotly()
@@ -299,6 +290,5 @@ def log_results(scores_path: Path, viz_path: Path, modules: list[str], scorer_na
         plot_intervention_stats(unique_latents, viz_path, model_name)
 
     # 3. Generate Scatter Plot (Fuzz vs. Intervention)
-    # Only works if we have BOTH types of data
     if not class_df.empty and not int_df.empty:
         plot_fuzz_vs_intervention(latent_df, viz_path, scores_path.name)
