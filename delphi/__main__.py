@@ -491,11 +491,13 @@ async def run(
     del model, hookpoint_to_sparse_encode
 
     if run_cfg.verbose:
-        log_results(scores_path, 
-        visualize_path, 
-        run_cfg.hookpoints, 
-        run_cfg.scorers, 
-        model_name=run_cfg.model)
+        log_results(
+            scores_path,
+            visualize_path,
+            run_cfg.hookpoints,
+            run_cfg.scorers,
+            model_name=run_cfg.model,
+        )
 
 
 if __name__ == "__main__":
