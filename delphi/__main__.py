@@ -10,7 +10,7 @@ import torch
 from simple_parsing import ArgumentParser
 from torch import Tensor
 from transformers import (
-    AutoModel,
+    AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
     PreTrainedModel,
@@ -27,7 +27,12 @@ from delphi.latents import LatentCache, LatentDataset
 from delphi.latents.neighbours import NeighbourCalculator
 from delphi.log.result_analysis import log_results
 from delphi.pipeline import Pipe, Pipeline, process_wrapper
-from delphi.scorers import DetectionScorer, FuzzingScorer, OpenAISimulator
+from delphi.scorers import (
+    DetectionScorer,
+    FuzzingScorer,
+    OpenAISimulator,
+    SurprisalInterventionScorer,
+)
 from delphi.sparse_coders import load_hooks_sparse_coders, load_sparse_coders
 from delphi.utils import assert_type, load_tokenized_data
 
@@ -40,7 +45,7 @@ def load_artifacts(run_cfg: RunConfig):
     else:
         dtype = "auto"
 
-    model = AutoModel.from_pretrained(
+    model = AutoModelForCausalLM.from_pretrained(
         run_cfg.model,
         device_map={"": "cuda"},
         quantization_config=(
@@ -118,6 +123,8 @@ async def process_cache(
     hookpoints: list[str],
     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
     latent_range: Tensor | None,
+    model,
+    hookpoint_to_sparse_encode,
 ):
     """
     Converts SAE latent activations in on-disk cache in the `latents_path` directory
@@ -219,6 +226,12 @@ async def process_cache(
             )
         )
 
+    def custom_serializer(obj):
+        """A custom serializer for orjson to handle specific types."""
+        if isinstance(obj, Tensor):
+            return obj.tolist()
+        raise TypeError
+
     # Builds the record from result returned by the pipeline
     def scorer_preprocess(result):
         if isinstance(result, list):
@@ -230,11 +243,18 @@ async def process_cache(
         return record
 
     # Saves the score to a file
-    def scorer_postprocess(result, score_dir):
+    # In your __main__.py file
+
+    def scorer_postprocess(result, score_dir, scorer_name=None):
+        if isinstance(result, list):
+            if not result:
+                return
+            result = result[0]
+
         safe_latent_name = str(result.record.latent).replace("/", "--")
 
         with open(score_dir / f"{safe_latent_name}.txt", "wb") as f:
-            f.write(orjson.dumps(result.score))
+            f.write(orjson.dumps(result.score, default=custom_serializer))
 
     scorers = []
     for scorer_name in run_cfg.scorers:
@@ -261,6 +281,16 @@ async def process_cache(
         elif scorer_name == "detection":
             scorer = DetectionScorer(
                 llm_client,
+                n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
+                verbose=run_cfg.verbose,
+                log_prob=run_cfg.log_probs,
+            )
+
+        elif scorer_name == "surprisal_intervention":
+            scorer = SurprisalInterventionScorer(
+                model,
+                hookpoint_to_sparse_encode,
+                hookpoints=run_cfg.hookpoints,
                 n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
                 verbose=run_cfg.verbose,
                 log_prob=run_cfg.log_probs,
@@ -404,6 +434,8 @@ async def run(
     hookpoints, hookpoint_to_sparse_encode, model, transcode = load_artifacts(run_cfg)
     tokenizer = AutoTokenizer.from_pretrained(run_cfg.model, token=run_cfg.hf_token)
 
+    model.tokenizer = tokenizer
+
     nrh = assert_type(
         dict,
         non_redundant_hookpoints(
@@ -420,7 +452,6 @@ async def run(
             transcode,
         )
 
-    del model, hookpoint_to_sparse_encode
     if run_cfg.constructor_cfg.non_activating_source == "neighbours":
         nrh = assert_type(
             list,
@@ -453,10 +484,20 @@ async def run(
             nrh,
             tokenizer,
             latent_range,
+            model,
+            hookpoint_to_sparse_encode,
         )
 
+    del model, hookpoint_to_sparse_encode
+
     if run_cfg.verbose:
-        log_results(scores_path, visualize_path, run_cfg.hookpoints, run_cfg.scorers)
+        log_results(
+            scores_path,
+            visualize_path,
+            run_cfg.hookpoints,
+            run_cfg.scorers,
+            model_name=run_cfg.model,
+        )
 
 
 if __name__ == "__main__":
