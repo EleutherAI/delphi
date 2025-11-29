@@ -48,7 +48,7 @@ cache = LatentCache(
 cache.run(n_tokens = 10_000_000, tokens=tokens)
 ```
 
-(See `populate_cache` in `delphi.__main__` for a full example.)
+See `populate_cache` in `delphi.__main__` for a full example. Both sparsify sparse coders and Gemma sparse coders are supported.
 
 Caching saves `.safetensors` of `dict["activations", "locations", "tokens"]`.
 
