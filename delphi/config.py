@@ -148,18 +148,14 @@ class RunConfig(Serializable):
     the default single token explainer, and 'none' for no explanation generation."""
 
     scorers: list[str] = list_field(
-        choices=[
-            "fuzz",
-            "detection",
-            "simulation",
-        ],
+        choices=["fuzz", "detection", "simulation", "surprisal_intervention"],
         default=[
             "fuzz",
             "detection",
         ],
     )
-    """Scorer methods to score latent explanations. Options are 'fuzz', 'detection', and
-    'simulation'."""
+    """Scorer methods to score latent explanations. Options are 'fuzz', 'detection',
+    'simulation' and 'surprisal_intervention'."""
     fuzz_type: Literal["default", "active"] = "default"
     """Type of fuzzing to use for the fuzz scorer. Default uses non-activating
     examples and highlights n_incorrect tokens. Active uses activating examples
