@@ -140,6 +140,11 @@ class RunConfig(Serializable):
     """Provider to use for explanation and scoring. Options are 'offline' for local
     models and 'openrouter' for API calls."""
 
+    server_port: int | None = field(default=None)
+    """Port for external vLLM server. If set, connects to a vLLM server running on
+    localhost at this port via OpenAI-compatible API instead of loading the model
+    locally. Start a server with: vllm serve <model> --port <port>"""
+
     explainer: str = field(
         choices=["default", "none"],
         default="default",
