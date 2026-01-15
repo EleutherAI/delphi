@@ -213,7 +213,11 @@ class Offline(Client):
         logprobs = kwargs.get("logprobs", False)
         top_logprobs = kwargs.get("top_logprobs", None) if logprobs else None
 
-        messages = prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}]
+        messages = (
+            prompt
+            if isinstance(prompt, list)
+            else [{"role": "user", "content": prompt}]
+        )
 
         response = await self.openai_client.chat.completions.create(
             model=self.model,
