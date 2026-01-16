@@ -14,8 +14,6 @@ from pathlib import Path
 from statistics import fmean
 from typing import Callable, Optional
 
-import orjson
-
 from delphi import logger
 from delphi.explainers.explainer import ExplainerResult
 from delphi.latents.latents import ActivatingExample, LatentRecord
@@ -23,8 +21,6 @@ from delphi.pipeline import Pipe, Pipeline, process_wrapper
 from delphi.scorers.scorer import Scorer, ScorerResult
 
 from .default.prompt_builder import build_prompt
-from .default.prompts import SYSTEM_BESTOFK
-
 
 # System prompt for generating multiple explanations in one shot
 SYSTEM_BESTOFK_ONESHOT = """You are a meticulous AI researcher conducting an important investigation into patterns found in language. Your task is to analyze text and provide an explanation that thoroughly encapsulates possible patterns found in it.
@@ -91,7 +87,9 @@ class BestOfKOrchestrator:
         """Generate K explanations, score them, and return the best."""
 
         # Split into train/test pools
-        train_pool, test_activating, test_non_activating = self._split_train_test(record)
+        train_pool, test_activating, test_non_activating = self._split_train_test(
+            record
+        )
 
         # Create clean record for scoring
         clean_record = LatentRecord(
@@ -123,7 +121,7 @@ class BestOfKOrchestrator:
             explanations = self._parse_multiple_explanations(response.text)
 
         # Cap at requested number
-        explanations = explanations[:self.num_explanations]
+        explanations = explanations[: self.num_explanations]
 
         # Create ExplainerResult for each candidate
         explainer_results = []
@@ -142,15 +140,18 @@ class BestOfKOrchestrator:
         if not explainer_results:
             # Fallback if parsing failed
             return ExplainerResult(
-                record=clean_record,
-                explanation="Explanation could not be parsed."
+                record=clean_record, explanation="Explanation could not be parsed."
             )
 
         # Score all candidates
         scorer_results = await self._run_scorers(explainer_results)
 
         # Select best based on judge scorer
-        judge_results = [s[self.judge_scorer_index] for s in scorer_results if s[self.judge_scorer_index]]
+        judge_results = [
+            s[self.judge_scorer_index]
+            for s in scorer_results
+            if s[self.judge_scorer_index]
+        ]
         best_idx = self._select_best_idx(judge_results)
 
         # Save best scores
@@ -213,10 +214,12 @@ class BestOfKOrchestrator:
 
         messages = [{"role": "system", "content": SYSTEM_BESTOFK_ONESHOT}]
         messages.append({"role": "user", "content": f"\n{highlighted_str}\n"})
-        messages.append({
-            "role": "user",
-            "content": f"The number of explanations to generate is: {self.num_explanations}."
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": f"The number of explanations to generate is: {self.num_explanations}.",
+            }
+        )
 
         return messages
 
@@ -248,7 +251,9 @@ class BestOfKOrchestrator:
         """Format activation values for display."""
         acts = ""
         count = 0
-        threshold_val = max(token_activations) * self.threshold if token_activations else 0
+        threshold_val = (
+            max(token_activations) * self.threshold if token_activations else 0
+        )
 
         for str_tok, tok_act, norm_act in zip(
             str_toks, token_activations, normalized_activations
@@ -289,10 +294,14 @@ class BestOfKOrchestrator:
             return process_wrapper(
                 scorer,
                 preprocess=self.scorer_preprocess,
-                postprocess=partial(
-                    self.scorer_postprocess or (lambda r, **_: r),
-                    score_dir=score_dir
-                ) if self.scorer_postprocess else None,
+                postprocess=(
+                    partial(
+                        self.scorer_postprocess or (lambda r, **_: r),
+                        score_dir=score_dir,
+                    )
+                    if self.scorer_postprocess
+                    else None
+                ),
             )
 
         wrappers = [make_wrapper(idx) for idx in range(num_scorers)]
@@ -331,7 +340,7 @@ class BestOfKOrchestrator:
             return float("-inf")
 
         # Check if embedding scorer (has 'similarity' attribute)
-        if hasattr(samples[0], 'similarity'):
+        if hasattr(samples[0], "similarity"):
             return self._compute_embedding_score(samples)
 
         # Otherwise assume classifier output
@@ -352,7 +361,11 @@ class BestOfKOrchestrator:
 
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        return 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+        return (
+            2 * precision * recall / (precision + recall)
+            if (precision + recall) > 0
+            else 0
+        )
 
     def _compute_embedding_score(self, samples) -> float:
         """Compute embedding score as difference of positive/negative similarities."""

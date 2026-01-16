@@ -24,9 +24,6 @@ from delphi.latents import (
 )
 from delphi.scorers.scorer import Scorer, ScorerResult
 
-from ..default.prompt_builder import build_prompt
-
-
 # System prompt for iterative refinement
 SYSTEM_ITERATIVE = """You are a meticulous AI researcher conducting an important investigation into patterns found in language. Your task is to analyze text and provide an explanation that thoroughly encapsulates possible patterns found in it.
 Guidelines:
@@ -106,8 +103,13 @@ class HillClimbingOrchestrator:
         """Run iterative refinement and return best/last explanation."""
 
         # Split data
-        train_pool, test_activating, test_non_activating, holdout_activating, holdout_non_activating = \
-            self._split_train_test_holdout(record)
+        (
+            train_pool,
+            test_activating,
+            test_non_activating,
+            holdout_activating,
+            holdout_non_activating,
+        ) = self._split_train_test_holdout(record)
 
         explanations = []
         all_holdout_scores = []
@@ -117,7 +119,9 @@ class HillClimbingOrchestrator:
         for round_idx in range(self.num_rounds):
             # Sample training examples
             if len(train_pool) > self.num_train_examples_per_round:
-                sampled_train = random.sample(train_pool, self.num_train_examples_per_round)
+                sampled_train = random.sample(
+                    train_pool, self.num_train_examples_per_round
+                )
             else:
                 sampled_train = train_pool
 
@@ -132,7 +136,9 @@ class HillClimbingOrchestrator:
                 )
 
             # Generate explanation
-            response = await self.client.generate(messages, temperature=self.temperature)
+            response = await self.client.generate(
+                messages, temperature=self.temperature
+            )
             explanation_text = self._parse_explanation(response.text)
 
             # Create result
@@ -169,7 +175,7 @@ class HillClimbingOrchestrator:
                     self.scorer_postprocess(
                         holdout_scorer_results[scorer_idx],
                         score_dir=score_dir,
-                        round_idx=round_idx
+                        round_idx=round_idx,
                     )
 
             # Extract wrong examples for next round
@@ -191,9 +197,7 @@ class HillClimbingOrchestrator:
         for scorer_idx, (_, score_dir) in enumerate(self.scorers_with_paths):
             if self.scorer_postprocess and final_scores[scorer_idx]:
                 self.scorer_postprocess(
-                    final_scores[scorer_idx],
-                    score_dir=score_dir,
-                    is_final=True
+                    final_scores[scorer_idx], score_dir=score_dir, is_final=True
                 )
 
         if self.explainer_postprocess:
@@ -209,8 +213,13 @@ class HillClimbingOrchestrator:
         holdout_activating = list(record.test)  # Use test as holdout
         holdout_non_activating = list(record.not_active)
 
-        return (train_pool, test_activating, test_non_activating,
-                holdout_activating, holdout_non_activating)
+        return (
+            train_pool,
+            test_activating,
+            test_non_activating,
+            holdout_activating,
+            holdout_non_activating,
+        )
 
     def _build_initial_prompt(self, examples: list[ActivatingExample]) -> list[dict]:
         """Build initial prompt without prior explanation."""
@@ -238,19 +247,25 @@ class HillClimbingOrchestrator:
             else:
                 false_positives.append(ex)
 
-        fp_str = self._format_examples(false_positives[:self.max_false_positives], show_activations=False)
-        fn_str = self._format_examples(false_negatives[:self.max_false_negatives])
+        fp_str = self._format_examples(
+            false_positives[: self.max_false_positives], show_activations=False
+        )
+        fn_str = self._format_examples(false_negatives[: self.max_false_negatives])
 
         messages = [{"role": "system", "content": SYSTEM_ITERATIVE}]
-        messages.append({"role": "user", "content": f"Normal examples:\n{highlighted}\n"})
-        messages.append({
-            "role": "user",
-            "content": (
-                f"Current explanation: {current_explanation}\n\n"
-                f"False negatives:\n{fn_str}\n"
-                f"False positives:\n{fp_str}\n"
-            )
-        })
+        messages.append(
+            {"role": "user", "content": f"Normal examples:\n{highlighted}\n"}
+        )
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    f"Current explanation: {current_explanation}\n\n"
+                    f"False negatives:\n{fn_str}\n"
+                    f"False positives:\n{fp_str}\n"
+                ),
+            }
+        )
 
         return messages
 
@@ -266,7 +281,10 @@ class HillClimbingOrchestrator:
             parts.append(f"Example {i}: {highlighted}")
 
             if show_activations and self.activations:
-                if hasattr(example, 'normalized_activations') and example.normalized_activations is not None:
+                if (
+                    hasattr(example, "normalized_activations")
+                    and example.normalized_activations is not None
+                ):
                     norm_acts = example.normalized_activations.tolist()
                     parts.append(self._join_activations(str_toks, acts, norm_acts))
 
@@ -300,7 +318,9 @@ class HillClimbingOrchestrator:
         """Format activation values."""
         acts = ""
         count = 0
-        threshold_val = max(token_activations) * self.threshold if token_activations else 0
+        threshold_val = (
+            max(token_activations) * self.threshold if token_activations else 0
+        )
 
         for str_tok, tok_act, norm_act in zip(
             str_toks, token_activations, normalized_activations
@@ -346,7 +366,7 @@ class HillClimbingOrchestrator:
                 continue
 
             for sample in result.score:
-                if not hasattr(sample, 'correct') or sample.correct:
+                if not hasattr(sample, "correct") or sample.correct:
                     continue
 
                 # Create example from wrong prediction
@@ -370,9 +390,7 @@ class HillClimbingOrchestrator:
 
         return wrong
 
-    def _select_best_idx(
-        self, all_scores: list[list[Optional[ScorerResult]]]
-    ) -> int:
+    def _select_best_idx(self, all_scores: list[list[Optional[ScorerResult]]]) -> int:
         """Select index of best round based on judge scorer."""
         scores = []
         for round_scores in all_scores:
@@ -390,7 +408,7 @@ class HillClimbingOrchestrator:
         if not samples:
             return float("-inf")
 
-        if hasattr(samples[0], 'similarity'):
+        if hasattr(samples[0], "similarity"):
             # Embedding scorer
             pos = [s.similarity for s in samples if s.activating]
             neg = [s.similarity for s in samples if not s.activating]
@@ -412,4 +430,8 @@ class HillClimbingOrchestrator:
 
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        return 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+        return (
+            2 * precision * recall / (precision + recall)
+            if (precision + recall) > 0
+            else 0
+        )
