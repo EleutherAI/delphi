@@ -7,6 +7,7 @@ from transformers import (
 )
 
 from delphi import logger
+from delphi.utils import decode_per_token
 
 from ..config import SamplerConfig
 from .latents import ActivatingExample, LatentRecord
@@ -128,7 +129,7 @@ def sampler(
     # Moved tokenization to sampler to avoid tokenizing
     # examples that are not going to be used
     for example in _train:
-        example.str_tokens = tokenizer.batch_decode(example.tokens)
+        example.str_tokens = decode_per_token(tokenizer, example.tokens)
     record.train = _train
     if cfg.n_examples_test > 0:
         _test = test(
@@ -139,6 +140,6 @@ def sampler(
             cfg.test_type,
         )
         for example in _test:
-            example.str_tokens = tokenizer.batch_decode(example.tokens)
+            example.str_tokens = decode_per_token(tokenizer, example.tokens)
         record.test = _test
     return record

@@ -12,6 +12,7 @@ from torch import Tensor
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 from delphi import logger
+from delphi.utils import decode_per_token
 
 from ..config import ConstructorConfig
 from .latents import (
@@ -50,7 +51,7 @@ def prepare_non_activating_examples(
             tokens=toks,
             activations=acts,
             distance=distance,
-            str_tokens=tokenizer.batch_decode(toks),
+            str_tokens=decode_per_token(tokenizer, toks),
         )
         for toks, acts in zip(tokens, activations)
     ]
