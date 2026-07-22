@@ -15,6 +15,7 @@ re.DOTALL)`, which had two failure modes:
 These tests pin the last-match, non-greedy-to-newline behavior and confirm
 clean parsing is preserved.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -81,6 +82,7 @@ def _parse(text: str) -> str:
 # Baseline: clean parsing must be unchanged
 # ---------------------------------------------------------------------------
 
+
 def test_clean_single_line_explanation_parses():
     expected = "Comparative adjectives describing size."
     text = f"Analysis of the tokens.\n[EXPLANATION]: {expected}"
@@ -99,6 +101,7 @@ def test_missing_marker_returns_fallback():
 # ---------------------------------------------------------------------------
 # Defense: CoT echo (the greedy-swallow defect)
 # ---------------------------------------------------------------------------
+
 
 def test_cot_reasoning_with_early_rejected_marker_does_not_swallow_chain():
     """The explainer considers then rejects an explanation. The previous
@@ -128,6 +131,7 @@ def test_last_marker_wins_when_multiple_present():
 # ---------------------------------------------------------------------------
 # Defense: prompt-injection (early injected marker must not win)
 # ---------------------------------------------------------------------------
+
 
 def test_injected_early_marker_in_highlighted_examples_loses_to_real_verdict():
     """A subject model whose top-activating text contains the marker (shown
