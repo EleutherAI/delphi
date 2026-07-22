@@ -62,12 +62,32 @@ class Explainer(ABC):
             )
 
     def parse_explanation(self, text: str) -> str:
+        # The system prompt instructs the explainer that "the last line of
+        # your response must be the formatted explanation, using [EXPLANATION]:".
+        # We bind to the LAST [EXPLANATION]: marker and capture only up to the
+        # next newline (non-greedy), not the FIRST marker greedily to end of
+        # text.
+        #
+        # Two failure modes the previous `re.search(r"\[EXPLANATION\]:\s*(.*)",
+        # re.DOTALL)` had:
+        #   1. Greedy-to-EOT capture (re.DOTALL + .*) swallowed the entire
+        #      response when the explainer reasoned in CoT and wrote
+        #      [EXPLANATION]: while thinking (e.g. "I considered
+        #      [EXPLANATION]: X but rejected it ... [EXPLANATION]: Y") — the
+        #      label became the whole chain, not the final verdict.
+        #   2. First-match binding let an early [EXPLANATION]: token — whether
+        #      the explainer echoing one it saw in the highlighted examples,
+        #      or a subject model whose top-activating text contained the
+        #      marker — win over the explainer's actual final verdict.
+        # Last-match + non-greedy-to-newline defeats both. Non-greedy capture
+        # without DOTALL stops at the first newline, so each [EXPLANATION]:
+        # binds to only its own line; taking the last match then selects the
+        # final verdict.
         try:
-            match = re.search(r"\[EXPLANATION\]:\s*(.*)", text, re.DOTALL)
-            if match:
-                return match.group(1).strip()
-            else:
-                return "Explanation could not be parsed."
+            matches = list(re.finditer(r"\[EXPLANATION\]:\s*(.+)", text))
+            if matches:
+                return matches[-1].group(1).strip()
+            return "Explanation could not be parsed."
         except Exception as e:
             logger.error(f"Explanation parsing regex failed: {repr(e)}")
             raise
