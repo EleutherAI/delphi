@@ -106,7 +106,7 @@ def compute_confusion(df: pd.DataFrame, threshold: float = 0.5) -> dict:
         total_examples=total,
         total_positives=pos,
         total_negatives=neg,
-        failed_count=len(df_valid) - total,
+        failed_count=len(df) - total,
     )
 
 
