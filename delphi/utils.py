@@ -68,6 +68,26 @@ def load_tokenized_data(
     return tokens
 
 
+def decode_per_token(
+    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+    tokens: Tensor,
+) -> list[str]:
+    """
+    Decode a 1-D tensor of token ids into one string per token.
+
+    On transformers >= 5, ``batch_decode`` treats a 1-D tensor as a single
+    sequence and returns one joined string, so it can no longer be used to
+    get per-token strings. ``convert_ids_to_tokens`` is not a substitute
+    either: it returns raw vocab strings, which for BPE tokenizers contain
+    encoding artifacts such as "Ġ".
+
+    Args:
+        tokenizer: The tokenizer to use.
+        tokens: A 1-D tensor of token ids of shape (ctx_len,).
+    """
+    return tokenizer.batch_decode(tokens.unsqueeze(-1))
+
+
 T = TypeVar("T")
 
 

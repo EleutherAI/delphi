@@ -13,6 +13,7 @@ import torch
 
 from delphi.latents.latents import ActivatingExample, NonActivatingExample
 from delphi.scorers.scorer import Scorer, ScorerResult
+from delphi.utils import decode_per_token
 
 from .data_models import ActivationRecord
 from .scoring import simulate_and_score
@@ -100,7 +101,7 @@ class RefactoredOpenAISimulator(Scorer):
 
             result.append(
                 ActivationRecord(
-                    self.tokenizer.batch_decode(example.tokens),
+                    decode_per_token(self.tokenizer, example.tokens),
                     activations,
                     quantile=(
                         example.quantile
