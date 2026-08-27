@@ -41,7 +41,10 @@ visualize = [
     "kaleido==0.2.1",
     "plotly>=5.0.0rc2",
     "pandas",
-    "ipywidgets"
+    "ipywidgets",
+    "transformer-lens<=2.15.4",
+    "sae-dashboard==0.6.11",
+    "more-itertools>=10.6.0"
 ]
 
 [tool.pyright]
