@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Optional
 
 from ..latents.latents import LatentRecord
 
@@ -10,6 +10,9 @@ class ScorerResult(NamedTuple):
 
     score: Any
     """Generated score for latent."""
+
+    duration: Optional[float] = None
+    """Time taken to generate the score in seconds."""
 
 
 class Scorer(ABC):

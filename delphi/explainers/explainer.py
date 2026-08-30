@@ -4,7 +4,7 @@ import random
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import NamedTuple
+from typing import NamedTuple, Optional
 
 import aiofiles
 
@@ -20,6 +20,9 @@ class ExplainerResult(NamedTuple):
 
     explanation: str
     """Generated explanation for latent."""
+
+    duration: Optional[float] = None
+    """Time taken to generate the explanation in seconds."""
 
 
 @dataclass

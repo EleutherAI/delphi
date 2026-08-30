@@ -144,11 +144,12 @@ class RunConfig(Serializable):
     models and 'openrouter' for API calls."""
 
     explainer: str = field(
-        choices=["default", "none"],
+        choices=["default", "none", "bestofk", "iterative"],
         default="default",
     )
     """Explainer to use for generating explanations. Options are 'default' for
-    the default single token explainer, and 'none' for no explanation generation."""
+    the default single token explainer, 'none' for no explanation generation,
+    'bestofk' for best-of-K sampling, and 'iterative' for iterative refinement."""
 
     scorers: list[str] = list_field(
         choices=[
@@ -167,6 +168,30 @@ class RunConfig(Serializable):
     """Type of fuzzing to use for the fuzz scorer. Default uses non-activating
     examples and highlights n_incorrect tokens. Active uses activating examples
     and highlights non-activating tokens."""
+
+    # BestOfK explainer config
+    bestofk_num_explanations: int = field(default=5)
+    """Number of explanation candidates to generate for best-of-K selection."""
+
+    bestofk_judge_scorer_index: int = field(default=0)
+    """Index of the scorer to use for selecting the best explanation."""
+
+    bestofk_num_train_examples: int | None = field(default=20)
+    """Number of training examples to show per explanation. None uses all available."""
+
+    # Iterative explainer config
+    iterative_num_rounds: int = field(default=3)
+    """Number of refinement rounds for iterative explanation."""
+
+    iterative_max_false_positives: int = field(default=20)
+    """Maximum false positive examples to include in refinement prompts."""
+
+    iterative_max_false_negatives: int = field(default=20)
+    """Maximum false negative examples to include in refinement prompts."""
+
+    iterative_carryforward_strategy: Literal["best", "last"] = "last"
+    """Strategy for selecting final explanation: 'best' uses highest-scoring,
+    'last' uses most recent refinement."""
 
     name: str = ""
     """The name of the run. Results are saved in a directory with this name."""
