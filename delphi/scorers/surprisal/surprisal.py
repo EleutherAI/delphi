@@ -99,23 +99,21 @@ class SurprisalScorer(Scorer):
         explanation_tokens = tokenizer.encode(
             explanation, return_tensors="pt", add_special_tokens=False
         ).to(model.device)
-        # Generate KV cache for explanation
-        explanation_tokens = explanation_tokens.repeat_interleave(batch_size, dim=0)
 
-        with torch.inference_mode():
-            outputs = model(input_ids=explanation_tokens, use_cache=True)
-            kv_cache = outputs.past_key_values
         total_losses = []
         for i in range(0, len(samples), batch_size):
             batch_samples = samples[i : i + batch_size]
             current_batch_size = len(batch_samples)
-            if current_batch_size < batch_size:
-                explanation_tokens = explanation_tokens.repeat_interleave(
-                    current_batch_size, dim=0
+
+            # Generate a KV cache for the explanation for this batch. It cannot be
+            # shared across batches: the forward pass below appends the batch's
+            # tokens to the cache in place (DynamicCache)
+            with torch.inference_mode():
+                outputs = model(
+                    input_ids=explanation_tokens.expand(current_batch_size, -1),
+                    use_cache=True,
                 )
-                with torch.inference_mode():
-                    outputs = model(input_ids=explanation_tokens, use_cache=True)
-                    kv_cache = outputs.past_key_values
+                kv_cache = outputs.past_key_values
 
             # Tokenize full input (explanation + prompts)
             full_inputs = [sample.text for sample in batch_samples]
