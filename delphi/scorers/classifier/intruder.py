@@ -199,8 +199,13 @@ class IntruderScorer(Classifier):
             elif self.type == "internal":
                 # randomly select a quantile to be the intruder, make sure it's not
                 # the same as the source quantile
-                all_quantile_examples = list(quantiled_intruder_sentences.values())
-                all_quantile_examples.remove(all_active_examples)
+                # select by quantile rather than list.remove, which compares the
+                # examples (and their tensors) for equality
+                all_quantile_examples = [
+                    examples
+                    for quantile, examples in quantiled_intruder_sentences.items()
+                    if quantile != active_quantile
+                ]
                 possible_intruder_sentences = self.rng.choice(all_quantile_examples)
 
                 intruder = self.rng.choice(possible_intruder_sentences)

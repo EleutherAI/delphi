@@ -67,6 +67,29 @@ def test_intruder_prepare_and_batch_returns_string_examples(monkeypatch):
         assert 0 <= batch.intruder_index < len(batch.examples)
 
 
+def test_intruder_internal_takes_intruder_from_another_quantile():
+    # Every quantile holds the same number of examples, so the quantile lists
+    # compare equal in length and their examples would be compared elementwise
+    record = LatentRecord(
+        latent=Latent(module_name="layers.0", latent_index=0),
+        test=[
+            _make_activating_example(f"Q{quantile}", quantile=quantile)
+            for quantile in range(3)
+            for _ in range(2)
+        ],
+        not_active=[
+            _make_non_activating_example(f"N{i}", distance=0.1) for i in range(6)
+        ],
+    )
+
+    scorer = IntruderScorer(DummyClient(), n_examples_shown=3, type="internal", seed=0)
+    batches = scorer._prepare_and_batch(record)
+
+    assert len(batches) == 6
+    for batch in batches:
+        assert batch.intruder_distance != batch.chosen_quantile
+
+
 def test_example_embedding_internal_batch_creation(monkeypatch):
     def fake_prepare_text(example, n_incorrect, threshold, highlighted):
         return f"fmt-{example.str_tokens[0]}-{n_incorrect}", example.str_tokens
