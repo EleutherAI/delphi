@@ -113,15 +113,19 @@ class Offline(Client):
         statistics = []
 
         for batch in batches:
+            # return_dict=False: transformers 5 returns a BatchEncoding by default
             prompt = self.tokenizer.apply_chat_template(
-                batch, add_generation_prompt=True, tokenize=True
+                batch, add_generation_prompt=True, tokenize=True, return_dict=False
             )
             prompt = TokensPrompt(prompt_token_ids=prompt)
             prompts.append(prompt)
             if self.statistics:
                 non_cached_tokens = len(
                     self.tokenizer.apply_chat_template(
-                        batch[-1:], add_generation_prompt=True, tokenize=True  # type: ignore
+                        batch[-1:],  # type: ignore
+                        add_generation_prompt=True,
+                        tokenize=True,
+                        return_dict=False,
                     )
                 )
                 statistics.append(
