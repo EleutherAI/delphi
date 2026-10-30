@@ -25,19 +25,29 @@ def normalize_activations(
 
 
 def split_quantiles(
-    examples: list[ActivatingExample], n_quantiles: int, n_samples: int, seed: int = 22
+    examples: list[ActivatingExample],
+    n_quantiles: int,
+    n_samples: int,
+    seed: int = 22,
+    exclude: list[ActivatingExample] | None = None,
 ) -> list[ActivatingExample]:
     """
-    Randomly select (n_samples // n_quantiles) samples from each quantile.
+    Randomly select (n_samples // n_quantiles) samples from each quantile,
+    skipping the examples in `exclude`.
     """
     random.seed(seed)
 
+    excluded_ids = {id(example) for example in exclude or []}
     quantile_size = len(examples) // n_quantiles
     samples_per_quantile = n_samples // n_quantiles
     samples: list[ActivatingExample] = []
     for i in range(n_quantiles):
         # Take an evenly spaced slice of the examples for the quantile.
-        quantile = examples[i * quantile_size : (i + 1) * quantile_size]
+        quantile = [
+            example
+            for example in examples[i * quantile_size : (i + 1) * quantile_size]
+            if id(example) not in excluded_ids
+        ]
 
         # Take a random sample of the examples.
         if len(quantile) < samples_per_quantile:
@@ -103,10 +113,13 @@ def test(
     n_test: int,
     n_quantiles: int,
     test_type: Literal["quantiles"],
+    exclude: list[ActivatingExample] | None = None,
 ):
     match test_type:
         case "quantiles":
-            selected_examples = split_quantiles(examples, n_quantiles, n_test)
+            selected_examples = split_quantiles(
+                examples, n_quantiles, n_test, exclude=exclude
+            )
             selected_examples = normalize_activations(selected_examples, max_activation)
             return selected_examples
 
@@ -132,12 +145,14 @@ def sampler(
         example.str_tokens = decode_per_token(tokenizer, example.tokens)
     record.train = _train
     if cfg.n_examples_test > 0:
+        # Score the explanation on examples the explainer was not shown
         _test = test(
             examples,
             max_activation,
             cfg.n_examples_test,
             cfg.n_quantiles,
             cfg.test_type,
+            exclude=_train,
         )
         for example in _test:
             example.str_tokens = decode_per_token(tokenizer, example.tokens)
