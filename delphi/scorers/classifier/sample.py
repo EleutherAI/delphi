@@ -26,9 +26,6 @@ class ClassifierOutput:
     activating: bool
     """Whether the example is activating or not"""
 
-    highlighted_indices: list[int] | None = None
-    """Token positions marked in the actual scorer input."""
-
     prediction: bool | None = False
     """Whether the model predicted the example activating or not"""
 
@@ -37,6 +34,9 @@ class ClassifierOutput:
 
     correct: bool | None = False
     """Whether the prediction is correct"""
+
+    highlighted_indices: list[int] | None = None
+    """Token positions marked in the actual scorer input."""
 
 
 class Sample(NamedTuple):
