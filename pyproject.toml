@@ -28,7 +28,8 @@ dependencies = [
     "anyio>=4.8.0",
     "faiss-cpu",
     "asyncer>=0.0.8",
-    "beartype"
+    "beartype",
+    "openai>=1.0.0",
 ]
 
 [project.optional-dependencies]
