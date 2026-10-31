@@ -71,9 +71,9 @@ class ActivationRecord(Serializable):
 UNKNOWN_ACTIVATION_STRING = "unknown"
 
 
-def relu(x: float) -> float:
+def relu(x: float | int) -> float:
     """Apply ReLU activation function (max(0, x))."""
-    return max(0.0, x)
+    return max(0.0, float(x))
 
 
 def calculate_max_activation(activation_records: Sequence[ActivationRecord]) -> float:
@@ -87,7 +87,7 @@ def calculate_max_activation(activation_records: Sequence[ActivationRecord]) -> 
 
 
 def normalize_activations(
-    activation_record: list[float], max_activation: float
+    activation_record: list[float | int], max_activation: float
 ) -> list[int]:
     """Convert raw neuron activations to integers on the range
     [0, MAX_NORMALIZED_ACTIVATION]."""
