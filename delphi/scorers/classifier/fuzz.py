@@ -1,7 +1,7 @@
-from math import ceil
+from collections import defaultdict
 from typing import Literal
 
-import torch
+from delphi import logger
 
 from ...clients.client import Client
 from ...latents import LatentRecord
@@ -9,7 +9,7 @@ from ...latents.latents import ActivatingExample, NonActivatingExample
 from ..scorer import Scorer
 from .classifier import Classifier
 from .prompts.fuzz_prompt import prompt as fuzz_prompt
-from .sample import Sample, examples_to_samples
+from .sample import Sample, activation_highlight_indices, examples_to_samples
 
 
 class FuzzingScorer(Classifier, Scorer):
@@ -40,8 +40,8 @@ class FuzzingScorer(Classifier, Scorer):
             generation_kwargs: Additional generation kwargs.
             temperature: Which temperature to use for the scorer model.
             fuzz_type: Which type of fuzzing to use. Default uses non-activating
-                examples and highlights n_incorrect tokens. Active uses activating
-                examples and highlights non-activating tokens.
+                examples and transfers positive mark sets one-to-one. Active pairs
+                those sets with zero-activation tokens in activating examples.
         """
         super().__init__(
             client=client,
@@ -51,22 +51,16 @@ class FuzzingScorer(Classifier, Scorer):
             temperature=temperature,
             **generation_kwargs,
         )
+        if not 0 <= threshold <= 1:
+            raise ValueError("threshold must be between 0 and 1")
+        if fuzz_type not in ("default", "active"):
+            raise ValueError(f"Unknown fuzz_type: {fuzz_type}")
         self.log_prob = log_prob
         self.threshold = threshold
         self.fuzz_type = fuzz_type
 
     def prompt(self, examples: str, explanation: str) -> list[dict]:
         return fuzz_prompt(examples, explanation)
-
-    def mean_n_activations_ceil(self, examples: list[ActivatingExample]):
-        """
-        Calculate the ceiling of the average number of activations in each example.
-        """
-        avg = sum(
-            len(torch.nonzero(example.activations)) for example in examples
-        ) / len(examples)
-
-        return ceil(avg)
 
     def _convert_to_non_activating(
         self, examples: list[ActivatingExample]
@@ -79,50 +73,79 @@ class FuzzingScorer(Classifier, Scorer):
                 tokens=example.tokens,
                 activations=example.activations,
                 str_tokens=example.str_tokens,
-                distance=-1,
+                distance=-1.0,
             )
             for example in examples
         ]
 
-    def _prepare(self, record: LatentRecord) -> list[Sample]:  # type: ignore
-        """
-        Prepare and shuffle a list of samples for classification.
-        """
-        assert len(record.test) > 0, "No test records found"
+    def _prepare(self, record: LatentRecord) -> list[Sample]:
+        """Pair masks one-to-one so mark-only rules have exactly chance accuracy.
 
-        n_incorrect = self.mean_n_activations_ceil(record.test)
-
-        if self.fuzz_type == "default":
-            assert len(record.not_active) > 0, "No non-activating examples found"
-            # check if non_activating examples have any activations > 0
-            # if they do they are contrastive examples
-            if (record.not_active[0].activations > 0).any():
-                samples = examples_to_samples(
-                    record.not_active,
-                    n_incorrect=0,
-                    highlighted=True,
-                )
-            else:
-                # if they don't we use randomly highlight n_incorrect tokens
-                samples = examples_to_samples(
-                    record.not_active,
-                    n_incorrect=n_incorrect,
-                    highlighted=True,
-                )
-        elif self.fuzz_type == "active":
-            # hard uses activating examples and
-            # highlights non active tokens
-            extras = self._convert_to_non_activating(record.test)
-            samples = examples_to_samples(
-                extras,
-                n_incorrect=n_incorrect,
-                highlighted=True,
-            )
-        samples.extend(
-            examples_to_samples(
-                record.test,  # type: ignore
-                n_incorrect=0,
-                highlighted=True,
-            )
+        Default negatives are windows known not to activate the target feature.
+        Their stored activations may describe a neighbouring feature and are not
+        used to choose marks. Active mode pairs masks with other test windows
+        only when every marked token has zero target activation.
+        """
+        if not record.test:
+            raise ValueError("No test records found")
+        negatives = (
+            record.not_active
+            if self.fuzz_type == "default"
+            else self._convert_to_non_activating(record.test)
         )
+        if not negatives:
+            raise ValueError("No non-activating examples found")
+
+        masks = [activation_highlight_indices(e, self.threshold) for e in record.test]
+        candidates: dict[int, list[int]] = defaultdict(list)
+        for i, positive in enumerate(record.test):
+            if not masks[i]:
+                continue
+            for j, negative in enumerate(negatives):
+                if len(positive.tokens) != len(negative.tokens):
+                    continue
+                if self.fuzz_type == "active" and bool(
+                    (negative.activations[masks[i]] > 0).any()
+                ):
+                    continue
+                candidates[i].append(j)
+            self.rng.shuffle(candidates[i])
+
+        # Maximum bipartite matching preserves every retained positive mask
+        # exactly once on each side, including when active-mode masks conflict.
+        matched: dict[int, int] = {}
+
+        def assign(i: int, seen: set[int]) -> bool:
+            for j in candidates[i]:
+                if j in seen:
+                    continue
+                seen.add(j)
+                if j not in matched or assign(matched[j], seen):
+                    matched[j] = i
+                    return True
+            return False
+
+        order = list(candidates)
+        self.rng.shuffle(order)
+        for i in order:
+            assign(i, set())
+        if not matched:
+            raise ValueError("No compatible positive/negative fuzzing pairs")
+        if len(matched) < len(record.test) or len(matched) < len(negatives):
+            logger.warning(
+                f"Fuzzing retained {len(matched)} matched pairs from "
+                f"{len(record.test)} positives and {len(negatives)} negatives"
+            )
+
+        samples = []
+        for j, i in matched.items():
+            for example in (record.test[i], negatives[j]):
+                samples.extend(
+                    examples_to_samples(
+                        [example],
+                        highlighted=True,
+                        threshold=self.threshold,
+                        highlight_indices=masks[i],
+                    )
+                )
         return samples
