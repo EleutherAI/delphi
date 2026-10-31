@@ -30,9 +30,9 @@ def positive(acts):
 def negative(length, acts=None):
     return NonActivatingExample(
         tokens=torch.arange(length),
-        activations=torch.tensor(acts).float()
-        if acts is not None
-        else torch.zeros(length),
+        activations=(
+            torch.tensor(acts).float() if acts is not None else torch.zeros(length)
+        ),
         str_tokens=[str(i) for i in range(length)],
     )
 
