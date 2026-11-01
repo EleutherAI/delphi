@@ -217,7 +217,7 @@ class IntruderScorer(Classifier):
                     tokens=intruder.tokens,
                     activations=intruder.activations,
                     str_tokens=intruder.str_tokens,
-                    distance=intruder.quantile,
+                    distance=float(intruder.quantile),
                 )
                 # we highlight the correct activating tokens though
                 intruder_sentence, _ = _prepare_text(
