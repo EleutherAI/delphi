@@ -1,6 +1,5 @@
 import json
 import os
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -39,22 +38,22 @@ def test_split_file_contents(cache_setup: dict[str, Any]):
     """
     save_dir = cache_setup["temp_dir"] / "layers.1"
     tokens = cache_setup["tokens"]
-    # Choose one file to verify
-    cache_files = os.listdir(save_dir)
-    file_path = Path(save_dir) / cache_files[0]
-    saved_cache = load_file(str(file_path))
+    # The directory also contains config.json; only tensor files are valid.
+    cache_files = sorted(save_dir.glob("*.safetensors"))
+    assert cache_files, "No safetensors cache splits found"
+    saved_cache = load_file(str(cache_files[0]))
 
     locations = saved_cache["locations"]
     activations = saved_cache["activations"]
-    tokens = saved_cache["tokens"]
+    saved_tokens = saved_cache["tokens"]
 
     assert len(locations) == len(
         activations
     ), "Mismatch between locations & activations entries"
 
     np.testing.assert_array_equal(
-        tokens,
-        tokens[:12, :],
+        saved_tokens,
+        tokens[: len(saved_tokens)],
         err_msg="Tokens saved do not match the input tokens",
     )
     max_values = locations.max(axis=0)
