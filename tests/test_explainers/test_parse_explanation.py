@@ -23,6 +23,7 @@ import logging
 import sys
 import types
 from pathlib import Path
+from unittest.mock import patch
 
 # parse_explanation is a pure regex method, but the delphi package's import
 # graph pulls in heavy optional deps (vllm, torch, bitsandbytes, ...). Load
@@ -33,7 +34,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _EXPLAINER_PATH = _REPO_ROOT / "delphi" / "explainers" / "explainer.py"
 
 
+@patch.dict(sys.modules)
 def _load_real_explainer():
+    # Restore both existing modules and missing entries after this isolated load.
+    # Otherwise collection replaces the real packages for every later test.
     # delphi.logger is referenced at import time.
     delphi_mod = types.ModuleType("delphi")
     delphi_mod.__path__ = [str(_REPO_ROOT / "delphi")]
@@ -150,3 +154,22 @@ def test_injected_early_marker_in_highlighted_examples_loses_to_real_verdict():
 def test_whitespace_only_capture_is_stripped():
     text = "[EXPLANATION]:    padded explanation   "
     assert _parse(text) == "padded explanation"
+
+
+def test_isolated_explainer_load_restores_module_cache():
+    names = (
+        "delphi",
+        "delphi.clients",
+        "delphi.clients.client",
+        "delphi.latents",
+        "delphi.latents.latents",
+        "delphi.explainers",
+        "delphi.explainers.explainer",
+        "aiofiles",
+    )
+    missing = object()
+    before = {name: sys.modules.get(name, missing) for name in names}
+    _load_real_explainer()
+    assert all(
+        sys.modules.get(name, missing) is module for name, module in before.items()
+    )
