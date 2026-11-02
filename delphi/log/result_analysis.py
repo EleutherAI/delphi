@@ -298,35 +298,37 @@ def log_results(
 
     latent_df, counts = load_data(scores_path, modules)
     latent_df = latent_df[latent_df["score_type"].isin(scorer_names)]
-    latent_df = add_latent_f1(latent_df)
-
-    plot_firing_vs_f1(
-        latent_df, num_tokens=10_000_000, out_dir=viz_path, run_label=scores_path.name
-    )
-
     if latent_df.empty:
         print("No data found")
         return
 
-    dead = sum((counts[m] == 0).sum().item() for m in modules)
-    print(f"Number of dead features: {dead}")
-    print(f"Number of interpreted live features: {len(latent_df)}")
-
-    # Load constructor config for run
-    with open(scores_path.parent / "run_config.json", "r") as f:
-        run_cfg = orjson.loads(f.read())
-    constructor_cfg = run_cfg.get("constructor_cfg", {})
-    min_examples = constructor_cfg.get("min_examples", None)
-    print("min examples", min_examples)
-
-    if min_examples is not None:
-        uninterpretable_features = sum(
-            [(counts[m] < min_examples).sum() for m in modules]
+    latent_df = add_latent_f1(latent_df)
+    if counts:
+        plot_firing_vs_f1(
+            latent_df,
+            num_tokens=10_000_000,
+            out_dir=viz_path,
+            run_label=scores_path.name,
         )
-        print(
-            f"Number of features below the interpretation firing"
-            f" count threshold: {uninterpretable_features}"
-        )
+        dead = sum((counts[m] == 0).sum().item() for m in modules)
+        print(f"Number of dead features: {dead}")
+        print(f"Number of interpreted live features: {len(latent_df)}")
+
+        # Load constructor config for run
+        with open(scores_path.parent / "run_config.json", "r") as f:
+            run_cfg = orjson.loads(f.read())
+        constructor_cfg = run_cfg.get("constructor_cfg", {})
+        min_examples = constructor_cfg.get("min_examples", None)
+        print("min examples", min_examples)
+
+        if min_examples is not None:
+            uninterpretable_features = sum(
+                [(counts[m] < min_examples).sum() for m in modules]
+            )
+            print(
+                f"Number of features below the interpretation firing"
+                f" count threshold: {uninterpretable_features}"
+            )
 
     plot_roc_curve(latent_df, viz_path)
 
@@ -339,11 +341,11 @@ def log_results(
         print(f"\n--- {score_type.title()} Metrics ---")
         print(f"Class-Balanced Accuracy: {score_type_summary['accuracy']:.3f}")
         print(f"F1 Score: {score_type_summary['f1_score']:.3f}")
-        print(f"Frequency-Weighted F1 Score: {score_type_summary['weighted_f1']:.3f}")
-        print(
-            "Note: the frequency-weighted F1 score is computed over each"
-            " hookpoint and averaged"
-        )
+        if score_type_summary["weighted_f1"] is not None:
+            print(
+                f"Frequency-Weighted F1 Score: {score_type_summary['weighted_f1']:.3f}"
+            )
+            print("Frequency-weighted F1 is averaged over hookpoints.")
         print(f"Precision: {score_type_summary['precision']:.3f}")
         print(f"Recall: {score_type_summary['recall']:.3f}")
         # Only print AUC if unbalanced AUC is not -1.
@@ -355,10 +357,8 @@ def log_results(
         fractions_failed = [
             score_type_summary["failed_count"]
             / (
-                (
-                    score_type_summary["total_examples"]
-                    + score_type_summary["failed_count"]
-                )
+                score_type_summary["total_examples"]
+                + score_type_summary["failed_count"]
             )
         ]
         print(f"""Average fraction of failed examples: \
@@ -383,6 +383,6 @@ def log_results(
         )
 
         print("\nClass Distribution:")
-        print(f"""Positives: {score_type_summary['total_positives'].sum():.0f}""")
-        print(f"""Negatives: {score_type_summary['total_negatives'].sum():.0f}""")
+        print(f"""Positives: {score_type_summary["total_positives"].sum():.0f}""")
+        print(f"""Negatives: {score_type_summary["total_negatives"].sum():.0f}""")
         print(f"Total: {score_type_summary['total_examples'].sum():.0f}")
