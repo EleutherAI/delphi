@@ -193,7 +193,11 @@ def load_data(scores_path: Path, modules: list[str]):
         if not score_type_dir.is_dir():
             continue
         for module in modules:
-            for file in score_type_dir.glob(f"*{module}*"):
+            # Score files are named f"{module}_latent{idx}" (see Latent.__str__);
+            # match the full module name so that e.g. "layers.1" does not also
+            # pick up the files of "layers.10"
+            safe_module = module.replace("/", "--")
+            for file in score_type_dir.glob(f"{safe_module}_latent*"):
                 latent_idx = int(file.stem.split("latent")[-1])
 
                 latent_df = parse_score_file(file)
@@ -203,7 +207,7 @@ def load_data(scores_path: Path, modules: list[str]):
                 if counts:
                     latent_df["firing_count"] = (
                         counts[module][latent_idx].item()
-                        if latent_idx in counts[module]
+                        if latent_idx < len(counts[module])
                         else None
                     )
 
@@ -234,7 +238,10 @@ def frequency_weighted_f1(
     for module in latent_df["module"].unique():
         module_df = latent_df[latent_df["module"] == module]
 
-        firing_weights = counts[module][module_df["latent_idx"]].float()
+        # Index with the values: a pandas Series would be indexed by its labels,
+        # which do not start at 0 for any module but the first
+        latent_indices = torch.as_tensor(module_df["latent_idx"].to_numpy())
+        firing_weights = counts[module][latent_indices].float()
         total_weight = firing_weights.sum()
         if total_weight == 0:
             continue
