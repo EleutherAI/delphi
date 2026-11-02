@@ -2,7 +2,7 @@
 
 Delphi was the home of a temple to Phoebus Apollo, which famously had the inscription, 'Know Thyself.' This library lets language models know themselves through automated interpretability.
 
-This library provides utilities for generating and scoring text explanations of sparse autoencoder (SAE) and transcoder features. The explainer and scorer models can be run locally or accessed using API calls via OpenRouter.
+This library provides utilities for generating and scoring text explanations of sparse autoencoder (SAE) and transcoder features. The explainer and scorer models can run locally with vLLM, through OpenRouter, or against an external OpenAI-compatible chat server.
 
 The branch used for the article [Automatically Interpreting Millions of Features in Large Language Models](https://arxiv.org/pdf/2410.13928) is the legacy branch [article_version](https://github.com/EleutherAI/delphi/tree/article_version), that branch contains the scripts to reproduce our experiments. Note that we're still actively improving the codebase and that the newest version on the main branch could require slightly different usage.
 
@@ -10,13 +10,17 @@ The branch used for the article [Automatically Interpreting Millions of Features
 
 Install this library as a local editable installation. Run the following command from the `delphi` directory.
 
-```pip install -e .```
+```bash
+pip install -e .
+# Include plotting dependencies for the CLI's summary visualizations:
+pip install -e ".[visualize]"
+```
 
 # Getting Started
 
 To run the default pipeline from the command line, use the following command:
 
-`python -m delphi EleutherAI/pythia-160m EleutherAI/Pythia-160m-SST-k32-32k --n_tokens 10_000_000 --max_latents 100 --hookpoints layers.5.mlp --scorers detection --filter_bos --name llama-3-8B`
+`python -m delphi EleutherAI/pythia-160m EleutherAI/Pythia-160m-SST-k32-32k --n_tokens 10_000_000 --max_latents 100 --hookpoints layers.5.mlp --scorers detection --filter_bos --name pythia-example`
 
 This command will:
 1. Cache activations for the first 10 million tokens of the default dataset, `EleutherAI/SmolLM2-135M-10B`.
@@ -33,6 +37,7 @@ To use experimental features, create a custom pipeline. You can take inspiration
 The first step to generate explanations is to cache sparse model activations. To do so, load your sparse models into the base model, load the tokens you want to cache the activations from, create a `LatentCache` object and run it. We recommend caching over at least 10M tokens.
 
 ```python
+from datasets import load_dataset
 from sparsify.data import chunk_and_tokenize
 from delphi.latents import LatentCache
 
@@ -53,13 +58,15 @@ See `populate_cache` in `delphi.__main__` for a full example. Both Sparsify spar
 Caching saves `.safetensors` of `dict["activations", "locations", "tokens"]`.
 
 ```python
+from pathlib import Path
+
 cache.save_splits(
     n_splits=5,
-    save_dir="raw_latents"
+    save_dir=Path("raw_latents")
 )
 ```
 
-Safetensors are split into shards over the width of the autoencoder.
+Safetensors are split into shards over the width of the autoencoder when saved; this is not incremental streaming of activations to disk.
 
 ## Loading Latent Records
 
@@ -85,6 +92,25 @@ dataset = LatentDataset(
     tokenizer=tokenizer
 )
 ```
+
+### Sampling and context windows
+
+`SamplerConfig.train_type` supports `top`, `random`, `quantiles`, and `mix`.
+Test examples are sampled from quantiles with the explanation-training examples
+excluded. Requested counts need not be divisible by the quantile count; a short
+request is distributed across quantiles rather than dropped. A quantile with
+insufficient available examples can still return fewer than requested.
+
+`ConstructorConfig.non_activating_source` supports `random`, `neighbours`, and
+`FAISS`. Neighbour selection can use co-occurrence, decoder similarity, or encoder
+similarity. The main CLI constructs the neighbour cache when needed; custom
+loaders must load the appropriate neighbour data as well.
+
+Windows are uncentered by default (`center_examples=False`). Set
+`center_examples=True` for peak-aligned windows. Explicit centering introduces
+a position cue for simulation scoring. The centering flag was inverted before
+v0.2.0: invert an explicit value in an old configuration to reproduce its old
+behavior.
 
 ### FAISS Index for Hard Negatives
 
@@ -126,23 +152,49 @@ explainer = ContrastiveExplainer(
 
 ## Generating Explanations
 
-We currently support using OpenRouter's OpenAI compatible API or running locally with VLLM. Define the client you want to use, then create an explainer from the `.explainers` module.
+Choose an in-process vLLM client, OpenRouter, or an external chat server, then create an explainer from `delphi.explainers`.
+
+For in-process vLLM:
+
+```python
+from delphi.clients import Offline
+
+client = Offline(
+    "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    max_memory=0.8, max_model_len=5120, num_gpus=1,
+)
+```
+
+For OpenRouter:
+
+```python
+import os
+from delphi.clients import OpenRouter
+
+client = OpenRouter(
+    "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    api_key=os.environ["OPENROUTER_API_KEY"],
+)
+```
+
+For an already running chat server:
+
+```python
+from delphi.clients import ServerClient
+
+client = ServerClient(
+    "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    base_url="http://localhost:8000/v1/",
+)
+```
+
+After choosing one client:
 
 ```python
 from delphi.explainers import DefaultExplainer
-from delphi.clients import Offline,OpenRouter
 
-# Run locally with VLLM
-client = Offline("meta-llama/Meta-Llama-3.1-8B-Instruct", max_memory=0.8, max_model_len=5120, num_gpus=1)
-
-# Run with OpenRouter
-client = OpenRouter("meta-llama/Meta-Llama-3.1-8B-Instruct", api_key=key)
-
-
-explainer = DefaultExplainer(
-    client,
-    tokenizer = dataset.tokenizer,
-)
+# LatentDataset supplies the decoded tokens; this constructor needs no tokenizer.
+explainer = DefaultExplainer(client)
 ```
 
 The explainer should be added to a pipe, which will send the explanation requests to the client. The pipe should have a function that happens after the request is completed, to e.g. save the data, and could also have a function that happens before the request is sent, e.g to transform some of the data.
@@ -161,7 +213,7 @@ explainer_pipe = process_wrapper(explainer,
     postprocess=explainer_postprocess,
 )
 ```
-The pipe should then be used in a pipeline. Running the pipeline will send requests to the client in batches of paralel requests.
+The pipe should then be used in a pipeline. Running the pipeline sends requests concurrently, up to `max_concurrent`.
 
 ```python
 from delphi.pipeline import Pipeline
@@ -172,29 +224,130 @@ pipeline = Pipeline(
     explainer_pipe,
 )
 
-asyncio.run(pipeline.run(n_processes))
+asyncio.run(pipeline.run(max_concurrent=10))
 ```
 
-## Scoring Explanations
+### Explainer availability
 
-The process of running a scorer is similar to that of an explainer. You need to have a client running, and you need to create a Scorer from the '.scorer' module. You can either load the explanations you generated earlier, or generate new ones using the explainer pipe.
+| Class | CLI selection | Purpose |
+| --- | --- | --- |
+| `DefaultExplainer` | `--explainer default` | Generate an explanation from activating training examples. |
+| `ContrastiveExplainer` | Automatic when `--non_activating_source FAISS` is used with the default explainer | Show activating and hard-negative examples together. |
+| `BestOfKOrchestrator` | `--explainer bestofk` | Generate candidates and select by validation score. |
+| `HillClimbingOrchestrator` | `--explainer iterative` | Refine an explanation using validation feedback. |
+| `NoOpExplainer` / saved explanation loading | `--explainer none` | Reuse explanations already saved in the run's explanations directory. |
+| `SingleTokenExplainer` | Python API only | Use the single-token explanation prompt. |
+
+For best-of-K, use `--bestofk_num_explanations`,
+`--bestofk_judge_scorer_index`, and `--bestofk_num_train_examples`.
+For iterative search, use `--iterative_num_rounds`,
+`--iterative_max_false_positives`, `--iterative_max_false_negatives`, and
+`--iterative_carryforward_strategy best` (or `last`). Both modes accept
+`--search_temperature` and use the configured `--scorers`.
+
+Search uses training examples for generation, splits the evaluation examples
+into validation and final subsets, and saves scores from evaluating the selected
+explanation on the final subset once. Validation data drive selection and
+feedback; final data do not. Each nonempty evaluation class needs at least two
+examples to make this split. Search is applied to the record as a whole; the
+standard pipeline's `max_concurrent` is not a candidate-search concurrency setting.
+
+For custom pipelines, `explanation_loader` reads a feature's saved explanation;
+`random_explanation_loader` samples a saved explanation from a directory. Random
+sampling is not a guarantee that every feature receives a different explanation,
+so enforce that separately when constructing a strict shuffled-explanation control.
+
+### External servers
+
+The CLI accepts `--server_port 8000` for localhost or
+`--server_url http://host:8000/v1/` for a remote API. Use one of these options,
+with `--explainer_provider offline` (the default), and set `--explainer_model`
+to the server's served model name. Optional authentication uses `SERVER_API_KEY`.
+OpenRouter instead uses `--explainer_provider openrouter` and
+`OPENROUTER_API_KEY`.
+
+External-server generation does not initialize a local vLLM model, although
+subject-model activation caching still needs its own model. External chat servers
+use JSON simulation; the local Offline client uses prompt-logprob simulation.
+Close a programmatically created `ServerClient` with `await client.close()`
+when finished. The CLI handles its cleanup.
+
+## Scoring and feature evaluation
+
+The package exports the following scorers. **Only `detection`, `fuzz`, and
+`simulation` are currently selectable with the CLI's `--scorers` option.**
+The other scorers require a custom Python pipeline or a direct call.
+
+| Scorer | CLI name | What it measures |
+| --- | --- | --- |
+| [`DetectionScorer`](delphi/scorers/classifier/detection.py) | `detection` | Whether an example fits the explanation. |
+| [`FuzzingScorer`](delphi/scorers/classifier/fuzz.py) | `fuzz` | Whether marked tokens fit the explanation. |
+| [`OpenAISimulator`](delphi/scorers/simulator/simulation/oai_simulator.py) | `simulation` | Correlation between predicted and observed token activations. |
+| [`IntruderScorer`](delphi/scorers/classifier/intruder.py) | API only | Find the odd example among related activating examples, without reading an explanation. |
+| [`EmbeddingScorer`](delphi/scorers/embedding/embedding.py) | API only | Embed an explanation and compare it with example embeddings. |
+| [`ExampleEmbeddingScorer`](delphi/scorers/embedding/example_embedding.py) | API only | Compare positive/negative example groups through embedding similarity, without an explanation. |
+| [`SurprisalScorer`](delphi/scorers/surprisal/surprisal.py) | API only | Compare per-token language-model losses with explanation and baseline prefixes. |
+
+`EmbeddingScorer` and `ExampleEmbeddingScorer` take a compatible
+`sentence_transformers` model; `SurprisalScorer` takes a language model with a
+`.tokenizer` attribute. They do not use a vLLM generation client. Surprisal here
+is prefix-conditioned loss scoring, not feature-intervention scoring.
+
+### Intruder detection
+
+Intruder detection is an **explanation-free feature-coherence test**, rather
+than a test of a supplied explanation. `type="default"` inserts a non-activating
+example among activating examples from one activation quantile. `type="internal"`
+instead inserts an activating example from a different quantile.
 
 ```python
-RecallScorer(
-    client,
-    tokenizer=tokenizer,
-    batch_size=cfg.batch_size
-)
+from delphi.scorers import IntruderScorer
+
+# dataset is a configured LatentDataset; client is a generation client.
+record = next(iter(dataset))
+scorer = IntruderScorer(client, n_examples_shown=4, type="default")
+result = scorer.call_sync(record)  # Or: result = await scorer(record)
+
+assert result.score, "No intruder groups were constructed"
+accuracy = sum(item.correct for item in result.score) / len(result.score)
 ```
 
-You can then create a pipe to run the scorer. The pipe should have a pre-processer, that takes the results from the previous pipe and a post processor, that saves the scores. An scorer should always be run after a explainer pipe, but the explainer pipe can be used to load saved explanations.
+The current constructor defaults to a one-example group, so set
+`n_examples_shown` explicitly to at least 2; use enough activating examples
+per quantile for the desired group size. Both modes currently require
+`record.not_active`, and internal mode also needs at least two activation
+quantiles. Results contain the predicted and correct intruder indices, a
+correctness flag, and the model's interpretation. These outputs have a different
+schema from binary detection/fuzzing results: aggregate them separately rather
+than passing them to the CLI's classification summary logger.
+
+### Fuzzing protocol
+
+`--fuzz_type default` uses target-inactive windows. `--fuzz_type active` uses
+activating windows whose marked tokens have zero target activation. Each
+retained positive mark set is transferred to one negative of the same token
+length, matching the observed distribution of marked positions and counts
+between labels. Outputs save `highlighted_indices` for auditing. Unmatched pairs
+are omitted with a coverage warning; a record with no compatible pairs fails
+explicitly. Scores from this protocol should not be compared directly with the
+older fixed-position/count protocol. Shuffled-explanation controls remain useful.
+
+### Composing a scoring pipeline
+
+Scorers consume `LatentRecord` objects with `record.explanation` set. Explainers
+return `ExplainerResult`, so extract its record before scoring. Multiple scorers
+can share a `Pipe`:
 
 ```python
-from delphi.scorers import FuzzingScorer, RecallScorer
-from delphi.explainers import  explanation_loader,random_explanation_loader
+import asyncio
+from functools import partial
+from pathlib import Path
 
+import orjson
 
-# Because we are running the explainer and scorer separately, we need to add the explanation and extra examples back to the record
+from delphi.pipeline import Pipe, Pipeline, process_wrapper
+from delphi.scorers import DetectionScorer, FuzzingScorer
+
 
 def scorer_preprocess(result):
     record = result.record
@@ -202,65 +355,52 @@ def scorer_preprocess(result):
     record.extra_examples = record.not_active
     return record
 
+
 def scorer_postprocess(result, score_dir):
-    with open(f"{score_dir}/{result.record.feature}.txt", "wb") as f:
-        f.write(orjson.dumps(result.score))
+    score_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = str(result.record.latent).replace("/", "--")
+    (score_dir / f"{safe_name}.txt").write_bytes(orjson.dumps(result.score))
+    return result
 
-# If one wants to load the explanations they generated earlier
-# explainer_pipe = partial(explanation_loader, explanation_dir=EXPLAINER_OUT_DIR)
 
-scorer_pipe = process_wrapper(
-        RecallScorer(client, tokenizer=dataset.tokenizer, batch_size=cfg.batch_size),
-        preprocess=scorer_preprocess,
-        postprocess=partial(scorer_postprocess, score_dir=recall_dir),
-    )
-
-```
-
-It is possible to have more than one scorer per pipe. One could use that to run fuzzing and detection together:
-
-```python
 scorer_pipe = Pipe(
     process_wrapper(
-        RecallScorer(client, tokenizer=tokenizer, batch_size=cfg.batch_size),
+        DetectionScorer(client, n_examples_shown=1),
         preprocess=scorer_preprocess,
-        postprocess=partial(scorer_postprocess, score_dir=recall_dir),
+        postprocess=partial(scorer_postprocess, score_dir=Path("scores/detection")),
     ),
     process_wrapper(
-        FuzzingScorer(client, tokenizer=tokenizer, batch_size=cfg.batch_size),
+        FuzzingScorer(client, n_examples_shown=1),
         preprocess=scorer_preprocess,
-        postprocess=partial(scorer_postprocess, score_dir=fuzz_dir),
+        postprocess=partial(scorer_postprocess, score_dir=Path("scores/fuzz")),
     ),
 )
+
+pipeline = Pipeline(dataset, explainer_pipe, scorer_pipe)
+asyncio.run(pipeline.run(max_concurrent=10))
 ```
 
-Then the pipe should be sent to the pipeline and run:
+`DetectionScorer` replaces the obsolete `RecallScorer` name found in older
+examples. The current detection/fuzzing constructors do not need `tokenizer` or
+`batch_size` arguments. Their prompt grouping is controlled by
+`n_examples_shown`; the CLI equivalent is `--num_examples_per_scorer_prompt`.
+`--log_probs` requests binary token probabilities where the client supports them.
 
-```python
-pipeline = Pipeline(
-        loader.load,
-        explainer_pipe,
-        scorer_pipe,
-)
+## Inspecting records and rerunning stages
 
-asyncio.run(pipeline.run())
-```
+`LatentRecord.display(tokenizer, example_source="test", do_display=False)` returns
+HTML for test examples; `example_source` also accepts `examples` and `train`.
+For an existing run, `--overwrite cache`, `--overwrite neighbours`, or
+`--overwrite scores` selects stages to recompute. Results live under
+`results/<name>/latents`, `explanations`, `scores`, `neighbours`, and `visualize`;
+`run_config.json` records the configuration.
 
-### Simulation
+## Examples
 
-To do simulation scoring we forked and modified OpenAIs neuron explainer. The name of the scorer is `OpenAISimulator`, and it can be run with the same setup as described above.
-
-### Surprisal
-
-Surprisal scoring computes the loss over some examples and uses a base model. We don't use VLLM but run the model using the `AutoModelForCausalLM` wrapper from HuggingFace. The setup is similar as above but for a example check `surprisal.py` in the experiments folder.
-
-### Embedding
-
-Embedding scoring uses a small embedding model through `sentence_transformers` to embed the examples do retrival. It also does not use VLLM but run the model directly. The setup is similar as above but for a example check `embedding.py` in the experiments folder.
-
-## Scripts
-
-Example scripts can be found in `demos`. Some of these scripts can be called from the CLI, as seen in examples found in `scripts`. These baseline scripts should allow anyone to start generating and scoring explanations in any SAE they are interested in. One always needs to first cache the activations of the features of any given SAE, and then generating explanations and scoring them can be done at the same time.
+Current examples are in [`examples/`](examples), including
+[`latent_contexts_visualization.py`](examples/latent_contexts_visualization.py).
+For the complete CLI pipeline, see [`delphi/__main__.py`](delphi/__main__.py);
+for a programmatic run, see [`tests/e2e.py`](tests/e2e.py).
 
 ## Experiments
 
@@ -271,14 +411,20 @@ The experiments discussed in [the blog post](https://blog.eleuther.ai/autointerp
 Set up the pre-commit lint and run the unit tests:
 
 ```bash
-pip install pre-commit pytest
+pip install -e ".[dev,visualize]"
 pre-commit install
-pytest .
+pytest
 ```
 
-Run an end-to-end test:
+From the repository checkout, run the end-to-end script:
 
-```python -m delphi.tests.e2e```
+```bash
+python -m tests.e2e
+```
+
+The end-to-end script downloads models and a dataset and performs GPU inference;
+it is separate from the ordinary unit-test run. Use `python -m delphi --help`
+for the complete generated CLI option list.
 
 We use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for releases.
 
