@@ -21,7 +21,13 @@ from transformers import (
 from delphi import logger
 from delphi.clients import OpenRouter, ServerClient
 from delphi.config import RunConfig
-from delphi.explainers import ContrastiveExplainer, DefaultExplainer, NoOpExplainer
+from delphi.explainers import (
+    BestOfKOrchestrator,
+    ContrastiveExplainer,
+    DefaultExplainer,
+    HillClimbingOrchestrator,
+    NoOpExplainer,
+)
 from delphi.explainers.explainer import ExplainerResult
 from delphi.latents import LatentCache, LatentDataset
 from delphi.latents.neighbours import NeighbourCalculator
@@ -184,14 +190,99 @@ async def process_cache(
         )
 
     try:
+
+        def explainer_postprocess(result):
+            with open(explanations_path / f"{result.record.latent}.txt", "wb") as f:
+                f.write(orjson.dumps(result.explanation))
+
+            return result
+
+        # Builds the record from result returned by the pipeline
+        def scorer_preprocess(result):
+            if isinstance(result, list):
+                result = result[0]
+
+            record = result.record
+            record.explanation = result.explanation
+            record.extra_examples = record.not_active
+            return record
+
+        # Saves the score to a file
+        def scorer_postprocess(result, score_dir):
+            safe_latent_name = str(result.record.latent).replace("/", "--")
+
+            with open(score_dir / f"{safe_latent_name}.txt", "wb") as f:
+                f.write(orjson.dumps(result.score))
+
+        scorers = []
+        scorers_with_paths = []
+        for scorer_name in run_cfg.scorers:
+            scorer_path = scores_path / scorer_name
+            scorer_path.mkdir(parents=True, exist_ok=True)
+
+            if scorer_name == "simulation":
+                if llm_client.supports_prompt_logprobs:
+                    scorer = OpenAISimulator(
+                        llm_client, tokenizer=tokenizer, all_at_once=True
+                    )
+                else:
+                    scorer = OpenAISimulator(
+                        llm_client, tokenizer=tokenizer, all_at_once=False
+                    )
+            elif scorer_name == "fuzz":
+                scorer = FuzzingScorer(
+                    llm_client,
+                    n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
+                    verbose=run_cfg.verbose,
+                    log_prob=run_cfg.log_probs,
+                    fuzz_type=run_cfg.fuzz_type,
+                )
+            elif scorer_name == "detection":
+                scorer = DetectionScorer(
+                    llm_client,
+                    n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
+                    verbose=run_cfg.verbose,
+                    log_prob=run_cfg.log_probs,
+                )
+            else:
+                raise ValueError(f"Scorer {scorer_name} not supported")
+
+            scorers_with_paths.append((scorer, scorer_path))
+            wrapped_scorer = process_wrapper(
+                scorer,
+                preprocess=scorer_preprocess,
+                postprocess=partial(scorer_postprocess, score_dir=scorer_path),
+            )
+            scorers.append(wrapped_scorer)
+
+        if run_cfg.explainer in ("bestofk", "iterative"):
+            options = dict(
+                client=llm_client,
+                scorers_with_paths=scorers_with_paths,
+                judge_scorer_index=run_cfg.bestofk_judge_scorer_index,
+                num_train_examples=run_cfg.bestofk_num_train_examples,
+                temperature=run_cfg.search_temperature,
+                seed=run_cfg.seed,
+                verbose=run_cfg.verbose,
+                scorer_postprocess=scorer_postprocess,
+            )
+            if run_cfg.explainer == "bestofk":
+                orchestrator = BestOfKOrchestrator(
+                    **options, num_explanations=run_cfg.bestofk_num_explanations
+                )
+            else:
+                orchestrator = HillClimbingOrchestrator(
+                    **options,
+                    num_rounds=run_cfg.iterative_num_rounds,
+                    max_false_positives=run_cfg.iterative_max_false_positives,
+                    max_false_negatives=run_cfg.iterative_max_false_negatives,
+                    carryforward_strategy=run_cfg.iterative_carryforward_strategy,
+                )
+            for record in dataset:
+                explainer_postprocess(await orchestrator(record))
+            return
+
         if not run_cfg.explainer == "none":
-
-            def explainer_postprocess(result):
-                with open(explanations_path / f"{result.record.latent}.txt", "wb") as f:
-                    f.write(orjson.dumps(result.explanation))
-
-                return result
-
             if run_cfg.constructor_cfg.non_activating_source == "FAISS":
                 explainer = ContrastiveExplainer(
                     llm_client,
@@ -231,62 +322,6 @@ async def process_cache(
                     postprocess=none_postprocessor,
                 )
             )
-
-        # Builds the record from result returned by the pipeline
-        def scorer_preprocess(result):
-            if isinstance(result, list):
-                result = result[0]
-
-            record = result.record
-            record.explanation = result.explanation
-            record.extra_examples = record.not_active
-            return record
-
-        # Saves the score to a file
-        def scorer_postprocess(result, score_dir):
-            safe_latent_name = str(result.record.latent).replace("/", "--")
-
-            with open(score_dir / f"{safe_latent_name}.txt", "wb") as f:
-                f.write(orjson.dumps(result.score))
-
-        scorers = []
-        for scorer_name in run_cfg.scorers:
-            scorer_path = scores_path / scorer_name
-            scorer_path.mkdir(parents=True, exist_ok=True)
-
-            if scorer_name == "simulation":
-                if llm_client.supports_prompt_logprobs:
-                    scorer = OpenAISimulator(
-                        llm_client, tokenizer=tokenizer, all_at_once=True
-                    )
-                else:
-                    scorer = OpenAISimulator(
-                        llm_client, tokenizer=tokenizer, all_at_once=False
-                    )
-            elif scorer_name == "fuzz":
-                scorer = FuzzingScorer(
-                    llm_client,
-                    n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
-                    verbose=run_cfg.verbose,
-                    log_prob=run_cfg.log_probs,
-                    fuzz_type=run_cfg.fuzz_type,
-                )
-            elif scorer_name == "detection":
-                scorer = DetectionScorer(
-                    llm_client,
-                    n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
-                    verbose=run_cfg.verbose,
-                    log_prob=run_cfg.log_probs,
-                )
-            else:
-                raise ValueError(f"Scorer {scorer_name} not supported")
-
-            wrapped_scorer = process_wrapper(
-                scorer,
-                preprocess=scorer_preprocess,
-                postprocess=partial(scorer_postprocess, score_dir=scorer_path),
-            )
-            scorers.append(wrapped_scorer)
 
         pipeline = Pipeline(
             dataset,
