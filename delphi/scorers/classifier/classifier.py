@@ -3,7 +3,7 @@ import json
 import random
 import re
 from abc import abstractmethod
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 
@@ -38,6 +38,8 @@ class Classifier(Scorer):
             log_prob: Whether to use log probabilities to allow for AUC calculation
             generation_kwargs: Additional generation kwargs
         """
+        if n_examples_shown < 1:
+            raise ValueError("n_examples_shown must be positive")
         self.client = client
         self.verbose = verbose
         self.n_examples_shown = n_examples_shown
@@ -101,18 +103,20 @@ class Classifier(Scorer):
             logger.error(f"Error generating text: {repr(e)}")
             response = None
         if response is None:
-            predictions = [None] * self.n_examples_shown
-            probabilities = [None] * self.n_examples_shown
+            predictions = [None] * len(batch)
+            probabilities = [None] * len(batch)
         else:
             assert isinstance(response, Response)
             selections = response.text
             logprobs = response.logprobs if self.log_prob else None
             try:
-                predictions, probabilities = self._parse(selections, logprobs)
+                predictions, probabilities = self._parse(
+                    selections, logprobs, n_predictions=len(batch)
+                )
             except Exception as e:
                 logger.error(f"Parsing selections failed: {repr(e)}")
-                predictions = [None] * self.n_examples_shown
-                probabilities = [None] * self.n_examples_shown
+                predictions = [None] * len(batch)
+                probabilities = [None] * len(batch)
 
         results = []
         for sample, prediction, probability in zip(batch, predictions, probabilities):
@@ -134,7 +138,10 @@ class Classifier(Scorer):
         return results
 
     def _parse(
-        self, string: str, logprobs: list[float] | None = None
+        self,
+        string: str,
+        logprobs: list[Any] | None = None,
+        n_predictions: int | None = None,
     ) -> tuple[list[bool], list[float] | list[None]]:
         """Extract binary predictions and probabilities from a string and
         optionally its token logprobs."""
@@ -143,18 +150,27 @@ class Classifier(Scorer):
         match = re.search(pattern, string)
         if match is None:
             raise ValueError("No match found in string")
-        raw_predictions: list[bool | Literal[0, 1]] = json.loads(match.group(0))
+        raw_predictions = json.loads(match.group(0))
+        if any(
+            type(value) not in (bool, int) or value not in (0, 1)
+            for value in raw_predictions
+        ):
+            raise ValueError("Predictions must be binary integers or booleans")
+        expected = self.n_examples_shown if n_predictions is None else n_predictions
         predictions = [bool(prediction) for prediction in raw_predictions]
-        assert len(predictions) == self.n_examples_shown
+        if len(predictions) != expected:
+            raise ValueError(f"Expected {expected} predictions, got {len(predictions)}")
         probabilities = (
-            self._parse_logprobs(logprobs)
+            self._parse_logprobs(logprobs, n_predictions=expected)
             if logprobs is not None
-            else [None] * self.n_examples_shown
+            else [None] * expected
         )
 
         return predictions, probabilities
 
-    def _parse_logprobs(self, logprobs: list[Any]) -> list[float]:
+    def _parse_logprobs(
+        self, logprobs: list[Any], n_predictions: int | None = None
+    ) -> list[float]:
         """
         Extracts normalized probabilities of '1' vs '0' tokens from the top n
         log probabilities for each token in a response string of form '[x, x, x, ...]'.
@@ -172,23 +188,25 @@ class Classifier(Scorer):
         binary_probabilities: list[float] = []
 
         for i in range(len(logprobs)):
-            if "1" in logprobs[i].token or "0" in logprobs[i].token:
+            if logprobs[i].token.strip() in ("0", "1"):
                 top_logprobs = logprobs[i].top_logprobs
                 prob_0 = 0.0
                 prob_1 = 0.0
                 for i in range(len(top_logprobs)):
                     token = top_logprobs[i].token
                     logprob = top_logprobs[i].logprob
-                    if "0" in token:
+                    if token.strip() == "0":
                         prob_0 += np.exp(logprob).item()
-                    elif "1" in token:
+                    elif token.strip() == "1":
                         prob_1 += np.exp(logprob).item()
                 if prob_0 + prob_1 > 0:
                     binary_probabilities.append(prob_1 / (prob_0 + prob_1))
                 else:
                     binary_probabilities.append(0.0)
 
-        assert len(binary_probabilities) == self.n_examples_shown
+        expected = self.n_examples_shown if n_predictions is None else n_predictions
+        if len(binary_probabilities) != expected:
+            raise ValueError("Log probabilities do not match the prediction count")
         return binary_probabilities
 
     def _build_prompt(
