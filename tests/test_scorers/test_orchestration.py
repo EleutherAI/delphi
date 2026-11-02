@@ -184,3 +184,53 @@ async def test_one_shot_generation_parses_final_candidate_lines():
 def test_search_configuration_is_validated(kwargs):
     with pytest.raises(ValueError):
         BestOfKOrchestrator(CandidateClient([]), [(Judge(), Path())], **kwargs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["bestofk", "iterative"])
+async def test_cli_process_cache_search_routes_save_final_scores(
+    monkeypatch, tmp_path, mode
+):
+    import orjson
+    from transformers import PreTrainedTokenizer
+
+    import delphi.__main__ as main
+    from delphi.config import CacheConfig, ConstructorConfig, RunConfig, SamplerConfig
+
+    class Tokenizer(PreTrainedTokenizer):
+        def __init__(self):
+            pass
+
+    client = CandidateClient(["A", "B"])
+    judge = Judge()
+    monkeypatch.setattr(main, "LatentDataset", lambda **kwargs: [record()])
+    monkeypatch.setattr(main, "OpenRouter", lambda *args, **kwargs: client)
+    monkeypatch.setattr(main, "DetectionScorer", lambda *args, **kwargs: judge)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "fake")
+    cfg = RunConfig(
+        CacheConfig(),
+        ConstructorConfig(),
+        SamplerConfig(),
+        explainer_provider="openrouter",
+        explainer=mode,
+        scorers=["detection"],
+        bestofk_num_explanations=2,
+        iterative_num_rounds=2,
+        iterative_carryforward_strategy="best",
+    )
+    await main.process_cache(
+        cfg,
+        tmp_path / "cache",
+        tmp_path / "explanations",
+        tmp_path / "scores",
+        ["test"],
+        Tokenizer(),
+        None,
+    )
+    assert (
+        orjson.loads((tmp_path / "explanations/test_latent0.txt").read_bytes()) == "B"
+    )
+    assert (
+        len(orjson.loads((tmp_path / "scores/detection/test_latent0.txt").read_bytes()))
+        == 8
+    )
