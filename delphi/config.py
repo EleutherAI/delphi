@@ -51,7 +51,7 @@ class ConstructorConfig(Serializable):
     n_non_activating: int = 50
     """Number of non-activating examples to be constructed."""
 
-    center_examples: bool = True
+    center_examples: bool = False
     """Whether to center the examples on the latent activation.
     If True, the examples will be centered on the latent activation.
     Otherwise, windows will be used, and the activating example can be anywhere

@@ -124,12 +124,12 @@ def pool_max_activation_windows(
 
 def pool_centered_activation_windows(
     activations: Float[Tensor, "examples"],
-    tokens: Float[Tensor, "windows seq"],
+    tokens: Int[Tensor, "windows seq"],
     n_windows_per_batch: int,
-    ctx_indices: Float[Tensor, "examples"],
-    index_within_ctx: Float[Tensor, "examples"],
+    ctx_indices: Int[Tensor, "examples"],
+    index_within_ctx: Int[Tensor, "examples"],
     ctx_len: int,
-) -> tuple[Float[Tensor, "examples ctx_len"], Float[Tensor, "examples ctx_len"]]:
+) -> tuple[Int[Tensor, "examples ctx_len"], Float[Tensor, "examples ctx_len"]]:
     """
     Similar to pool_max_activation_windows. Doesn't use the ctx_indices that were
     at the start of the batch or the end of the batch, because it always tries
@@ -175,7 +175,7 @@ def pool_centered_activation_windows(
     unique_ctx_indices = unique_ctx_indices[mask]
     temp_tensor = temp_tensor[mask]
     if len(unique_ctx_indices) == 0:
-        return torch.zeros(0, ctx_len), torch.zeros(0, ctx_len)
+        return tokens.new_empty((0, ctx_len)), activations.new_empty((0, ctx_len))
 
     # Vectorized operations for all windows at once
     n_windows = len(unique_ctx_indices)
@@ -256,13 +256,13 @@ def constructor(
     mask = torch.ones(n_windows, dtype=torch.bool)
     mask[unique_batch_pos] = False
     # Indices where the latent is not active
-    non_active_indices = mask.nonzero(as_tuple=False).squeeze()
+    non_active_indices = mask.nonzero(as_tuple=False).flatten()
     activations = activation_data.activations
     # per context frequency
     record.per_context_frequency = len(unique_batch_pos) / n_windows
 
     # Add activation examples to the record in place
-    if constructor_cfg.center_examples:
+    if not constructor_cfg.center_examples:
         token_windows, act_windows = pool_max_activation_windows(
             activations=activations,
             tokens=reshaped_tokens,
@@ -529,7 +529,7 @@ def faiss_non_activation_windows(
     # Create non-activating examples
     return prepare_non_activating_examples(
         selected_tokens,
-        torch.zeros_like(selected_tokens),
+        torch.zeros_like(selected_tokens, dtype=torch.float32),
         -1.0,  # Using -1.0 as the distance since these are not neighbour-based
         tokenizer,
     )
@@ -630,7 +630,7 @@ def neighbour_non_activation_windows(
         logger.warning(
             "No examples found, falling back to random non-activating examples"
         )
-        non_active_indices = not_active_mask.nonzero(as_tuple=False).squeeze()
+        non_active_indices = not_active_mask.nonzero(as_tuple=False).flatten()
 
         return random_non_activating_windows(
             available_indices=non_active_indices,
@@ -659,7 +659,7 @@ def random_non_activating_windows(
         to the context length.
         n_not_active (int): The number of non activating examples to generate.
     """
-    torch.manual_seed(seed)
+    rng = torch.Generator().manual_seed(seed)
     if n_not_active == 0:
         return []
 
@@ -669,16 +669,16 @@ def random_non_activating_windows(
         logger.warning("No available randomly sampled non-activating sequences")
         return []
     else:
-        random_indices = torch.randint(
-            0, available_indices.shape[0], size=(n_not_active,)
-        )
+        random_indices = torch.randperm(available_indices.numel(), generator=rng)[
+            :n_not_active
+        ]
         selected_indices = available_indices[random_indices]
 
     toks = reshaped_tokens[selected_indices]
 
     return prepare_non_activating_examples(
         toks,
-        torch.zeros_like(toks),  # there is no way to define these activations
+        torch.zeros_like(toks, dtype=torch.float32),
         -1.0,
         tokenizer,
     )
