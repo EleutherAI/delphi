@@ -31,10 +31,18 @@ def test_prepare_text_highlighted_correct_example_returns_markers():
     assert "<<" in text and ">>" in text
 
 
-def test_prepare_text_false_positive_forces_activating_token_position():
-    example = _non_activating_example()
-    text, _ = _prepare_text(example, n_incorrect=1, threshold=0.3, highlighted=True)
+def test_prepare_text_false_positive_does_not_force_a_token_position():
+    import random
 
-    token_pos = len(example.str_tokens) - len(example.str_tokens) // 4
-    expected_token = example.str_tokens[token_pos]
-    assert f"<<{expected_token}>>" in text
+    rng = random.Random(4)
+    texts = {
+        _prepare_text(
+            _non_activating_example(),
+            n_incorrect=1,
+            threshold=0.3,
+            highlighted=True,
+            rng=rng,
+        )[0]
+        for _ in range(40)
+    }
+    assert len(texts) == 4

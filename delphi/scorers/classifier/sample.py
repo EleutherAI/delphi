@@ -6,15 +6,10 @@ from typing import Callable, NamedTuple
 
 import torch
 
-from delphi import logger
-
 from ...latents import ActivatingExample, NonActivatingExample
 
 L = "<<"
 R = ">>"
-DEFAULT_MESSAGE = (
-    "<<NNsight>> is the best library for <<interpretability>> on huge models!"
-)
 
 
 @dataclass
@@ -40,6 +35,9 @@ class ClassifierOutput:
     correct: bool | None = False
     """Whether the prediction is correct"""
 
+    highlighted_indices: list[int] | None = None
+    """Token positions marked in the actual scorer input."""
+
 
 class Sample(NamedTuple):
     text: str
@@ -51,12 +49,16 @@ def examples_to_samples(
     n_incorrect: int = 0,
     threshold: float = 0.3,
     highlighted: bool = False,
+    highlight_indices: list[int] | None = None,
+    rng: random.Random | None = None,
     **sample_kwargs,
 ) -> list[Sample]:
     samples = []
 
     for example in examples:
-        text, str_toks = _prepare_text(example, n_incorrect, threshold, highlighted)
+        text, str_toks = _prepare_text(
+            example, n_incorrect, threshold, highlighted, highlight_indices, rng
+        )
         match example:
             case ActivatingExample():
                 activating = True
@@ -73,6 +75,11 @@ def examples_to_samples(
                     activations=example.activations.tolist(),
                     activating=activating,
                     distance=distance,
+                    highlighted_indices=(
+                        list(highlight_indices)
+                        if highlight_indices is not None
+                        else None
+                    ),
                     **sample_kwargs,
                 ),
             )
@@ -89,6 +96,8 @@ def _prepare_text(
     n_incorrect: int,
     threshold: float,
     highlighted: bool,
+    highlight_indices: list[int] | None = None,
+    rng: random.Random | None = None,
 ) -> tuple[str, list[str]]:
     assert n_incorrect >= 0, (
         "n_incorrect must be 0 if highlighting correct example "
@@ -105,65 +114,34 @@ def _prepare_text(
 
         return clean, str_toks
 
-    abs_threshold = threshold * example.max_activation
+    if highlight_indices is not None:
+        indices = set(highlight_indices)
+        if not indices or any(i < 0 or i >= len(str_toks) for i in indices):
+            raise ValueError("Highlight indices must be nonempty and within the window")
+        return _highlight(str_toks, indices.__contains__), str_toks
 
-    # Highlight tokens with activations above threshold
-    # if this is a correct example
+    positive_indices = activation_highlight_indices(example, threshold)
     if n_incorrect == 0:
-
-        def is_above_activation_threshold(i: int) -> bool:
-            return bool((example.activations[i] >= abs_threshold).item())
-
-        return _highlight(str_toks, is_above_activation_threshold), str_toks
-
-    # Highlight n_incorrect tokens with activations
-    # below threshold if this is an incorrect example
-    tokens_below_threshold = torch.nonzero(
-        example.activations <= abs_threshold
-    ).squeeze()
-
-    # Rare case where there are no tokens below threshold
-    if tokens_below_threshold.dim() == 0:
-        logger.error(
-            f"Tried to prepare false-positive example with {n_incorrect} tokens "
-            "incorrectly highlighted, but no tokens were below activation threshold."
-        )
-        return DEFAULT_MESSAGE, str_toks
-
-    random.seed(22)
-
-    num_tokens_to_highlight = min(n_incorrect, tokens_below_threshold.shape[0])
-
-    # The activating token is always ctx_len - ctx_len//4
-    # so we always highlight this one, and if num_tokens_to_highlight > 1
-    # we highlight num_tokens_to_highlight - 1 random ones
-    # TODO: This is wrong
-    token_pos = len(str_toks) - len(str_toks) // 4
-    if token_pos in tokens_below_threshold:
-        random_indices = [token_pos]
-
-        num_remaining_tokens_to_highlight = num_tokens_to_highlight - 1
-        if num_remaining_tokens_to_highlight > 0:
-            remaining_tokens_below_threshold = tokens_below_threshold.tolist()
-            remaining_tokens_below_threshold.remove(token_pos)
-
-            random_indices.extend(
-                random.sample(
-                    remaining_tokens_below_threshold,
-                    num_remaining_tokens_to_highlight,
-                )
-            )
+        indices = set(positive_indices)
     else:
-        random_indices = random.sample(
-            tokens_below_threshold.tolist(), num_tokens_to_highlight
-        )
+        # Zero activations remain eligible even when the relative threshold is zero.
+        eligible = [i for i in range(len(str_toks)) if i not in positive_indices]
+        if not eligible:
+            raise ValueError("No tokens available for incorrect highlighting")
+        indices = set((rng or random).sample(eligible, min(n_incorrect, len(eligible))))
+    return _highlight(str_toks, indices.__contains__), str_toks
 
-    random_indices = set(random_indices)
 
-    def is_false_positive(i):
-        return i in random_indices
-
-    return _highlight(str_toks, is_false_positive), str_toks
+def activation_highlight_indices(
+    example: ActivatingExample | NonActivatingExample, threshold: float
+) -> list[int]:
+    """Use one threshold rule for both rendering and fuzzing mask construction."""
+    if not 0 <= threshold <= 1:
+        raise ValueError("threshold must be between 0 and 1")
+    mask = (example.activations > 0) & (
+        example.activations >= threshold * example.max_activation
+    )
+    return torch.nonzero(mask, as_tuple=True)[0].tolist()
 
 
 def _highlight(tokens: list[str], check: Callable[[int], bool]) -> str:
