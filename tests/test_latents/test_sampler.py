@@ -6,7 +6,7 @@ from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 from delphi.config import SamplerConfig
 from delphi.latents import ActivatingExample, Latent, LatentRecord, sampler
-from delphi.latents.samplers import split_quantiles
+from delphi.latents.samplers import split_quantiles, train
 
 
 def activating_examples(n: int = 1000) -> list[ActivatingExample]:
@@ -49,6 +49,25 @@ def test_split_quantiles_returns_as_many_as_asked_for(n_samples: int, n_quantile
     samples = split_quantiles(activating_examples(), n_quantiles, n_samples)
 
     assert len(samples) == n_samples
+
+
+@pytest.mark.parametrize(
+    "n_train,ratio_top,n_top",
+    [(40, 0.2, 8), (10, 0.8, 8), (10, 0.9, 9), (5, 0.8, 4), (20, 0.9, 18)],
+)
+def test_mix_returns_n_train_examples(n_train: int, ratio_top: float, n_top: int):
+    # int(n_train * (1 - ratio_top)) floors float error, e.g. 10 * (1 - 0.8) is
+    # 1.9999999999999996, so the quantile share came back one example short.
+    examples = activating_examples()
+
+    selected = train(
+        examples, 1000.0, n_train, "mix", n_quantiles=10, ratio_top=ratio_top
+    )
+
+    assert len(selected) == n_train
+    assert [id(example) for example in selected[:n_top]] == [
+        id(example) for example in examples[:n_top]
+    ]
 
 
 def test_split_quantiles_samples_stay_in_their_own_quantile():
