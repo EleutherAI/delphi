@@ -32,16 +32,26 @@ def split_quantiles(
     exclude: list[ActivatingExample] | None = None,
 ) -> list[ActivatingExample]:
     """
-    Randomly select (n_samples // n_quantiles) samples from each quantile,
-    skipping the examples in `exclude`.
+    Randomly select n_samples examples spread over the quantiles, skipping the
+    examples in `exclude`.
+
+    Each quantile contributes n_samples // n_quantiles, and the remainder is
+    spread over the quantiles so the total is n_samples rather than the nearest
+    multiple below it. A request smaller than n_quantiles therefore takes one
+    example from that many quantiles instead of none from any.
     """
     random.seed(seed)
 
     excluded_ids = {id(example) for example in exclude or []}
     quantile_size = len(examples) // n_quantiles
-    samples_per_quantile = n_samples // n_quantiles
     samples: list[ActivatingExample] = []
     for i in range(n_quantiles):
+        # Cumulative counts, so the n_samples % n_quantiles extra samples land in
+        # quantiles spaced across the range instead of bunching at the top.
+        samples_per_quantile = (n_samples * (i + 1)) // n_quantiles - (
+            n_samples * i
+        ) // n_quantiles
+
         # Take an evenly spaced slice of the examples for the quantile.
         quantile = [
             example
