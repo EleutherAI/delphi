@@ -38,6 +38,8 @@ class Statistics:
 
 
 class Offline(Client):
+    supports_prompt_logprobs = True
+
     provider = "offline"
 
     def __init__(
