@@ -144,7 +144,7 @@ class RunConfig(Serializable):
     models and 'openrouter' for API calls."""
 
     explainer: str = field(
-        choices=["default", "none"],
+        choices=["default", "none", "bestofk", "iterative"],
         default="default",
     )
     """Explainer to use for generating explanations. Options are 'default' for
@@ -167,6 +167,15 @@ class RunConfig(Serializable):
     """Type of fuzzing to use for the fuzz scorer. Default uses non-activating
     examples and highlights n_incorrect tokens. Active uses activating examples
     and highlights non-activating tokens."""
+
+    bestofk_num_explanations: int = 5
+    bestofk_judge_scorer_index: int = 0
+    bestofk_num_train_examples: int | None = 20
+    search_temperature: float = 1.0
+    iterative_num_rounds: int = 3
+    iterative_max_false_positives: int = 20
+    iterative_max_false_negatives: int = 20
+    iterative_carryforward_strategy: Literal["best", "last"] = "last"
 
     name: str = ""
     """The name of the run. Results are saved in a directory with this name."""

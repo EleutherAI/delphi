@@ -7,9 +7,13 @@ from .single_token_explainer import SingleTokenExplainer
 __all__ = [
     "Explainer",
     "DefaultExplainer",
+    "BestOfKOrchestrator",
+    "HillClimbingOrchestrator",
     "SingleTokenExplainer",
     "explanation_loader",
     "random_explanation_loader",
     "ContrastiveExplainer",
     "NoOpExplainer",
 ]
+
+from .orchestration import BestOfKOrchestrator, HillClimbingOrchestrator
