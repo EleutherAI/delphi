@@ -1,6 +1,49 @@
 # CHANGELOG
 
 
+## v0.2.0 (2026-11-02)
+
+### Bug Fixes
+
+- Keep explanation search scores aligned and reserve final evaluation data
+  ([`f288c2d`](https://github.com/EleutherAI/delphi/commit/f288c2de4c6503d94c94cf0b863b46dbdf95060c))
+
+- Report classification metrics without optional firing counts
+  ([`99599e2`](https://github.com/EleutherAI/delphi/commit/99599e2d74399df6389cf77c45aaa8c7233b8f72))
+
+- Spread the quantile sample remainder instead of dropping it
+  ([`c8b0199`](https://github.com/EleutherAI/delphi/commit/c8b019935e7da3e284b7a107f05aad45a7a4cd76))
+
+`split_quantiles` took `n_samples // n_quantiles` from every quantile, so a request that didn't
+  divide evenly came back short and one smaller than `n_quantiles` came back empty.
+  `--n_examples_test 5` with the default `--n_quantiles 10` asked for five scoring examples and
+  produced none, with no warning: the per-quantile count was 0, which is never fewer than the
+  examples available, so the "fewer than" log never fired either.
+
+Each quantile's count now comes from the difference of two cumulative counts, which sums to
+  `n_samples` exactly and puts the remainder in quantiles spaced across the range rather than
+  bunched at the top. A request that already divided evenly, every default among them, takes the
+  same examples it did before.
+
+### Features
+
+- Add --server-port option to connect to external vLLM server
+  ([`ab02aed`](https://github.com/EleutherAI/delphi/commit/ab02aed9dac54681ff5ecfb87cf20ed0c5afc2e9))
+
+When set, uses OpenAI-compatible API to talk to a vLLM server instead of loading the model
+  in-process. Default behavior unchanged.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+
+- Support external chat servers with explicit simulation capabilities
+  ([`f207027`](https://github.com/EleutherAI/delphi/commit/f207027ef60dd485105c9c949259d193f309749e))
+
+- Wire validated explanation search into the CLI
+  ([`1cddb36`](https://github.com/EleutherAI/delphi/commit/1cddb36b10a8c1f7271463e744b2c40988328b1c))
+
+
 ## v0.1.4 (2026-11-02)
 
 ### Bug Fixes
