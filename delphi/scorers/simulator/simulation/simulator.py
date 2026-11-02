@@ -123,11 +123,12 @@ class NeuronSimulator:
         }
 
         response = await self.client.generate(prompt, **sampling_params)
+        # return_dict=False: transformers 5 returns a BatchEncoding by default
         tokenized_prompt = self.client.tokenizer.apply_chat_template(
-            prompt, add_generation_prompt=True
+            prompt, add_generation_prompt=True, return_dict=False
         )
-        # Use [1] to skip BOS token that tokenizer.encode() may prepend
-        tab_token = self.client.tokenizer.encode("\t")[1]
+        # Not every tokenizer prepends a BOS token, so encode without special tokens
+        tab_token = self.client.tokenizer.encode("\t", add_special_tokens=False)[-1]
 
         result = parse_simulation_response(
             response, tokenized_prompt, tab_token, tokens
