@@ -19,7 +19,7 @@ from transformers import (
 )
 
 from delphi import logger
-from delphi.clients import Offline, OpenRouter
+from delphi.clients import OpenRouter, ServerClient
 from delphi.config import RunConfig
 from delphi.explainers import ContrastiveExplainer, DefaultExplainer, NoOpExplainer
 from delphi.explainers.explainer import ExplainerResult
@@ -85,14 +85,12 @@ def create_neighbours(
     )
 
     for hookpoint in hookpoints:
-
         if constructor_cfg.neighbours_type == "co-occurrence":
             neighbour_calculator = NeighbourCalculator(
                 cache_dir=latents_path / hookpoint, number_of_neighbours=250
             )
 
         elif constructor_cfg.neighbours_type == "decoder_similarity":
-
             neighbour_calculator = NeighbourCalculator(
                 autoencoder=saes[hookpoint].to("cuda"), number_of_neighbours=250
             )
@@ -142,7 +140,21 @@ async def process_cache(
         tokenizer=tokenizer,
     )
 
-    if run_cfg.explainer_provider == "offline":
+    if run_cfg.server_url and run_cfg.server_port is not None:
+        raise ValueError("Set only one of server_url and server_port")
+    if run_cfg.server_url or run_cfg.server_port is not None:
+        if run_cfg.explainer_provider != "offline":
+            raise ValueError("Server options require explainer_provider=offline")
+        if run_cfg.server_port is not None and not 1 <= run_cfg.server_port <= 65535:
+            raise ValueError("server_port must be between 1 and 65535")
+        llm_client = ServerClient(
+            run_cfg.explainer_model,
+            run_cfg.server_url or f"http://localhost:{run_cfg.server_port}/v1/",
+            api_key=os.environ.get("SERVER_API_KEY"),
+        )
+    elif run_cfg.explainer_provider == "offline":
+        from .clients.offline import Offline
+
         llm_client = Offline(
             run_cfg.explainer_model,
             max_memory=run_cfg.max_memory,
@@ -171,124 +183,128 @@ async def process_cache(
             f"Explainer provider {run_cfg.explainer_provider} not supported"
         )
 
-    if not run_cfg.explainer == "none":
+    try:
+        if not run_cfg.explainer == "none":
 
-        def explainer_postprocess(result):
-            with open(explanations_path / f"{result.record.latent}.txt", "wb") as f:
-                f.write(orjson.dumps(result.explanation))
+            def explainer_postprocess(result):
+                with open(explanations_path / f"{result.record.latent}.txt", "wb") as f:
+                    f.write(orjson.dumps(result.explanation))
 
-            return result
+                return result
 
-        if run_cfg.constructor_cfg.non_activating_source == "FAISS":
-            explainer = ContrastiveExplainer(
-                llm_client,
-                threshold=0.3,
-                verbose=run_cfg.verbose,
-            )
-        else:
-            explainer = DefaultExplainer(
-                llm_client,
-                threshold=0.3,
-                verbose=run_cfg.verbose,
-            )
-
-        explainer_pipe = Pipe(
-            process_wrapper(explainer, postprocess=explainer_postprocess)
-        )
-    else:
-
-        def none_postprocessor(result):
-            # Load the explanation from disk
-            explanation_path = explanations_path / f"{result.record.latent}.txt"
-            if not explanation_path.exists():
-                raise FileNotFoundError(
-                    f"Explanation file {explanation_path} does not exist. "
-                    "Make sure to run an explainer pipeline first."
-                )
-
-            with open(explanation_path, "rb") as f:
-                return ExplainerResult(
-                    record=result.record,
-                    explanation=orjson.loads(f.read()),
-                )
-
-        explainer_pipe = Pipe(
-            process_wrapper(
-                NoOpExplainer(),
-                postprocess=none_postprocessor,
-            )
-        )
-
-    # Builds the record from result returned by the pipeline
-    def scorer_preprocess(result):
-        if isinstance(result, list):
-            result = result[0]
-
-        record = result.record
-        record.explanation = result.explanation
-        record.extra_examples = record.not_active
-        return record
-
-    # Saves the score to a file
-    def scorer_postprocess(result, score_dir):
-        safe_latent_name = str(result.record.latent).replace("/", "--")
-
-        with open(score_dir / f"{safe_latent_name}.txt", "wb") as f:
-            f.write(orjson.dumps(result.score))
-
-    scorers = []
-    for scorer_name in run_cfg.scorers:
-        scorer_path = scores_path / scorer_name
-        scorer_path.mkdir(parents=True, exist_ok=True)
-
-        if scorer_name == "simulation":
-            if isinstance(llm_client, Offline):
-                scorer = OpenAISimulator(
-                    llm_client, tokenizer=tokenizer, all_at_once=True
+            if run_cfg.constructor_cfg.non_activating_source == "FAISS":
+                explainer = ContrastiveExplainer(
+                    llm_client,
+                    threshold=0.3,
+                    verbose=run_cfg.verbose,
                 )
             else:
-                scorer = OpenAISimulator(
-                    llm_client, tokenizer=tokenizer, all_at_once=False
+                explainer = DefaultExplainer(
+                    llm_client,
+                    threshold=0.3,
+                    verbose=run_cfg.verbose,
                 )
-        elif scorer_name == "fuzz":
-            scorer = FuzzingScorer(
-                llm_client,
-                n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
-                verbose=run_cfg.verbose,
-                log_prob=run_cfg.log_probs,
-                fuzz_type=run_cfg.fuzz_type,
-            )
-        elif scorer_name == "detection":
-            scorer = DetectionScorer(
-                llm_client,
-                n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
-                verbose=run_cfg.verbose,
-                log_prob=run_cfg.log_probs,
+
+            explainer_pipe = Pipe(
+                process_wrapper(explainer, postprocess=explainer_postprocess)
             )
         else:
-            raise ValueError(f"Scorer {scorer_name} not supported")
 
-        wrapped_scorer = process_wrapper(
-            scorer,
-            preprocess=scorer_preprocess,
-            postprocess=partial(scorer_postprocess, score_dir=scorer_path),
+            def none_postprocessor(result):
+                # Load the explanation from disk
+                explanation_path = explanations_path / f"{result.record.latent}.txt"
+                if not explanation_path.exists():
+                    raise FileNotFoundError(
+                        f"Explanation file {explanation_path} does not exist. "
+                        "Make sure to run an explainer pipeline first."
+                    )
+
+                with open(explanation_path, "rb") as f:
+                    return ExplainerResult(
+                        record=result.record,
+                        explanation=orjson.loads(f.read()),
+                    )
+
+            explainer_pipe = Pipe(
+                process_wrapper(
+                    NoOpExplainer(),
+                    postprocess=none_postprocessor,
+                )
+            )
+
+        # Builds the record from result returned by the pipeline
+        def scorer_preprocess(result):
+            if isinstance(result, list):
+                result = result[0]
+
+            record = result.record
+            record.explanation = result.explanation
+            record.extra_examples = record.not_active
+            return record
+
+        # Saves the score to a file
+        def scorer_postprocess(result, score_dir):
+            safe_latent_name = str(result.record.latent).replace("/", "--")
+
+            with open(score_dir / f"{safe_latent_name}.txt", "wb") as f:
+                f.write(orjson.dumps(result.score))
+
+        scorers = []
+        for scorer_name in run_cfg.scorers:
+            scorer_path = scores_path / scorer_name
+            scorer_path.mkdir(parents=True, exist_ok=True)
+
+            if scorer_name == "simulation":
+                if llm_client.supports_prompt_logprobs:
+                    scorer = OpenAISimulator(
+                        llm_client, tokenizer=tokenizer, all_at_once=True
+                    )
+                else:
+                    scorer = OpenAISimulator(
+                        llm_client, tokenizer=tokenizer, all_at_once=False
+                    )
+            elif scorer_name == "fuzz":
+                scorer = FuzzingScorer(
+                    llm_client,
+                    n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
+                    verbose=run_cfg.verbose,
+                    log_prob=run_cfg.log_probs,
+                    fuzz_type=run_cfg.fuzz_type,
+                )
+            elif scorer_name == "detection":
+                scorer = DetectionScorer(
+                    llm_client,
+                    n_examples_shown=run_cfg.num_examples_per_scorer_prompt,
+                    verbose=run_cfg.verbose,
+                    log_prob=run_cfg.log_probs,
+                )
+            else:
+                raise ValueError(f"Scorer {scorer_name} not supported")
+
+            wrapped_scorer = process_wrapper(
+                scorer,
+                preprocess=scorer_preprocess,
+                postprocess=partial(scorer_postprocess, score_dir=scorer_path),
+            )
+            scorers.append(wrapped_scorer)
+
+        pipeline = Pipeline(
+            dataset,
+            explainer_pipe,
+            Pipe(*scorers),
         )
-        scorers.append(wrapped_scorer)
 
-    pipeline = Pipeline(
-        dataset,
-        explainer_pipe,
-        Pipe(*scorers),
-    )
+        if run_cfg.pipeline_num_proc > 1 and run_cfg.explainer_provider == "openrouter":
+            print(
+                "OpenRouter does not support multiprocessing,"
+                " setting pipeline_num_proc to 1"
+            )
+            run_cfg.pipeline_num_proc = 1
 
-    if run_cfg.pipeline_num_proc > 1 and run_cfg.explainer_provider == "openrouter":
-        print(
-            "OpenRouter does not support multiprocessing,"
-            " setting pipeline_num_proc to 1"
-        )
-        run_cfg.pipeline_num_proc = 1
-
-    await pipeline.run(run_cfg.pipeline_num_proc)
+        await pipeline.run(run_cfg.pipeline_num_proc)
+    finally:
+        if isinstance(llm_client, ServerClient):
+            await llm_client.close()
 
 
 def populate_cache(
