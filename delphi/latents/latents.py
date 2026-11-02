@@ -176,7 +176,7 @@ class LatentRecord:
             save_examples: Whether to save the examples. Defaults to False.
         """
         path = f"{directory}/{self.latent}.json"
-        serializable = self.__dict__
+        serializable = self.__dict__.copy()
 
         if not save_examples:
             serializable.pop("examples")
@@ -220,7 +220,7 @@ class LatentRecord:
             str: The formatted string.
         """
 
-        def _to_string(toks, activations: Float[Tensor, "ctx_len"]) -> str:
+        def _to_string(toks, activations: list[Float[Tensor, "ctx_len"]]) -> str:
             """
             Convert tokens and activations to a string.
 
@@ -277,7 +277,7 @@ class LatentRecord:
             case "train":
                 examples = self.train
             case "test":
-                examples = [x[0] for x in self.test]
+                examples = self.test
             case _:
                 raise ValueError(f"Unknown example source: {example_source}")
         examples = examples[:n]
