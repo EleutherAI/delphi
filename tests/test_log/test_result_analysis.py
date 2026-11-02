@@ -100,3 +100,45 @@ def test_frequency_weighted_f1_with_several_modules(tmp_path):
 
     # per-module F1 is 1.0 for "layers.1" and 0.0 for "layers.10"
     assert metrics["weighted_f1"].tolist() == [0.5]
+
+
+def test_logging_without_firing_counts_keeps_classification_metrics(
+    monkeypatch, tmp_path, capsys
+):
+    from delphi.log import result_analysis as analysis
+
+    frame = pd.DataFrame(
+        {
+            "module": ["layers.1", "layers.1"],
+            "latent_idx": [0, 0],
+            "score_type": ["detection", "detection"],
+            "activating": [True, False],
+            "prediction": [True, False],
+            "probability": [None, None],
+        }
+    )
+    monkeypatch.setattr(analysis, "import_plotly", lambda: None)
+    monkeypatch.setattr(analysis, "load_data", lambda *args: (frame, None))
+    monkeypatch.setattr(
+        analysis,
+        "plot_firing_vs_f1",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("Missing counts must skip the firing-rate plot")
+        ),
+    )
+    monkeypatch.setattr(analysis, "plot_roc_curve", lambda *args: None)
+    monkeypatch.setattr(analysis, "plot_accuracy_hist", lambda *args: None)
+    analysis.log_results(
+        tmp_path / "scores", tmp_path / "viz", ["layers.1"], ["detection"]
+    )
+    assert "Class-Balanced Accuracy: 1.000" in capsys.readouterr().out
+
+
+def test_logging_empty_scores_returns_before_plotting(monkeypatch, tmp_path, capsys):
+    from delphi.log import result_analysis as analysis
+
+    frame = pd.DataFrame(columns=["score_type"])
+    monkeypatch.setattr(analysis, "import_plotly", lambda: None)
+    monkeypatch.setattr(analysis, "load_data", lambda *args: (frame, None))
+    analysis.log_results(tmp_path / "scores", tmp_path / "viz", [], ["detection"])
+    assert "No data found" in capsys.readouterr().out
