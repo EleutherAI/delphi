@@ -1,16 +1,18 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Union
+from typing import Any, Union
 
 
 @dataclass
 class Response:
     text: str
-    logprobs: list[float] | None = None
-    prompt_logprobs: list[float] | None = None
+    logprobs: list[Any] | None = None
+    prompt_logprobs: list[Any] | None = None
 
 
 class Client(ABC):
+    supports_prompt_logprobs = False
+
     def __init__(self, model: str):
         self.model = model
 

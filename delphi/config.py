@@ -143,6 +143,12 @@ class RunConfig(Serializable):
     """Provider to use for explanation and scoring. Options are 'offline' for local
     models and 'openrouter' for API calls."""
 
+    server_port: int | None = None
+    """Connect to an external server on localhost at this port."""
+
+    server_url: str | None = None
+    """OpenAI-compatible API base URL, e.g. http://host:8000/v1/."""
+
     explainer: str = field(
         choices=["default", "none", "bestofk", "iterative"],
         default="default",
