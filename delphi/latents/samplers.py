@@ -106,11 +106,12 @@ def train(
             selected_examples = normalize_activations(selected_examples, max_activation)
             return selected_examples
         case "mix":
-            top_examples = examples[: int(n_train * ratio_top)]
+            n_top = int(n_train * ratio_top)
+            top_examples = examples[:n_top]
             quantiles_examples = split_quantiles(
-                examples[int(n_train * ratio_top) :],
+                examples[n_top:],
                 n_quantiles,
-                int(n_train * (1 - ratio_top)),
+                n_train - n_top,
             )
             selected_examples = top_examples + quantiles_examples
             selected_examples = normalize_activations(selected_examples, max_activation)
