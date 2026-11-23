@@ -67,6 +67,48 @@ def test_intruder_prepare_and_batch_returns_string_examples(monkeypatch):
         assert 0 <= batch.intruder_index < len(batch.examples)
 
 
+def _count_highlighted_tokens(text: str) -> int:
+    # every token is one character, so count the characters inside << >>
+    return sum(len(span.split(">>")[0]) for span in text.split("<<")[1:])
+
+
+def test_intruder_highlights_as_many_tokens_as_activating_examples():
+    # One strong peak and three weak activations below 0.3 * max: each
+    # activating example shows a single highlighted token
+    def make_example(peak: int, quantile: int) -> ActivatingExample:
+        activations = torch.zeros(16)
+        activations[[1, 7, 13]] = 1.0
+        activations[peak] = 10.0
+        return ActivatingExample(
+            tokens=torch.arange(16),
+            activations=activations,
+            str_tokens=list("abcdefghijklmnop"),
+            quantile=quantile,
+        )
+
+    record = LatentRecord(
+        latent=Latent(module_name="layers.0", latent_index=0),
+        test=[make_example(peak, quantile=0) for peak in (3, 9, 15)],
+        not_active=[
+            NonActivatingExample(
+                tokens=torch.arange(16),
+                activations=torch.zeros(16),
+                str_tokens=list("ABCDEFGHIJKLMNOP"),
+                distance=-1.0,
+            )
+            for _ in range(4)
+        ],
+    )
+
+    scorer = IntruderScorer(DummyClient(), n_examples_shown=4, type="default", seed=0)
+    batches = scorer._prepare_and_batch(record)
+
+    assert len(batches) == 4
+    for batch in batches:
+        counts = [_count_highlighted_tokens(text) for text in batch.examples]
+        assert counts == [1] * len(counts), (batch.intruder_index, counts)
+
+
 def test_intruder_internal_takes_intruder_from_another_quantile():
     # Every quantile holds the same number of examples, so the quantile lists
     # compare equal in length and their examples would be compared elementwise
