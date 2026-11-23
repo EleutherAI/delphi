@@ -1,3 +1,5 @@
+import random
+
 import torch
 
 from delphi.clients.client import Client, Response
@@ -37,7 +39,7 @@ def _make_non_activating_example(token: str, distance: float) -> NonActivatingEx
 
 
 def test_intruder_prepare_and_batch_returns_string_examples(monkeypatch):
-    def fake_prepare_text(example, n_incorrect, threshold, highlighted):
+    def fake_prepare_text(example, n_incorrect, threshold, highlighted, rng=None):
         return f"fmt-{example.str_tokens[0]}-{n_incorrect}", example.str_tokens
 
     monkeypatch.setattr(
@@ -88,6 +90,41 @@ def test_intruder_internal_takes_intruder_from_another_quantile():
     assert len(batches) == 6
     for batch in batches:
         assert batch.intruder_distance != batch.chosen_quantile
+
+
+def test_intruder_default_batches_are_reproducible_with_seed():
+    def make_record() -> LatentRecord:
+        return LatentRecord(
+            latent=Latent(module_name="layers.0", latent_index=0),
+            test=[
+                ActivatingExample(
+                    tokens=torch.arange(16),
+                    activations=torch.eye(16)[i],
+                    str_tokens=list("abcdefghijklmnop"),
+                    quantile=0,
+                )
+                for i in range(3)
+            ],
+            not_active=[
+                NonActivatingExample(
+                    tokens=torch.arange(16),
+                    activations=torch.zeros(16),
+                    str_tokens=list("ABCDEFGHIJKLMNOP"),
+                    distance=-1.0,
+                )
+                for _ in range(4)
+            ],
+        )
+
+    def build_batches(global_seed: int) -> list[list[str]]:
+        # other code may use the global random module between runs
+        random.seed(global_seed)
+        scorer = IntruderScorer(
+            DummyClient(), n_examples_shown=4, type="default", seed=42
+        )
+        return [batch.examples for batch in scorer._prepare_and_batch(make_record())]
+
+    assert build_batches(global_seed=1) == build_batches(global_seed=2)
 
 
 def test_example_embedding_internal_batch_creation(monkeypatch):
