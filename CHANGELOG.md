@@ -1,6 +1,32 @@
 # CHANGELOG
 
 
+## v0.2.1 (2026-11-26)
+
+### Bug Fixes
+
+- Give the default intruder as many highlights as the activating examples show
+  ([`1eef3c0`](https://github.com/EleutherAI/delphi/commit/1eef3c0ed19aadf4ea3bac37ba6867197f71b6a4))
+
+IntruderScorer(type="default") set the number of random highlights on the intruder from every token
+  with activation > 0, while the activating examples only highlight tokens at or above 0.3 * max.
+  Count the tokens that activation_highlight_indices(example, 0.3) returns instead, so the intruder
+  can't be spotted by its number of highlighted tokens.
+
+- Pass the scorer's rng when highlighting the default intruder
+  ([`80d59db`](https://github.com/EleutherAI/delphi/commit/80d59dbb4cc97fa8884fe53b5e0043a419c5e32a))
+
+IntruderScorer(type="default") picked the intruder's random highlights with the global random
+  module, because its _prepare_text call did not pass rng=self.rng. Two scorers built with the same
+  seed could build different batches. Pass the scorer's rng, as the rest of _prepare_and_batch
+  already does.
+
+### Documentation
+
+- Document intruder evaluation and current CLI and API features
+  ([`052269e`](https://github.com/EleutherAI/delphi/commit/052269e78285b024efd6363e12387ad88739982c))
+
+
 ## v0.2.0 (2026-11-02)
 
 ### Bug Fixes
