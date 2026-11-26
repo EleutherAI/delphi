@@ -3,8 +3,6 @@ from typing import Optional
 
 import orjson
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
 import torch
 from sklearn.metrics import roc_auc_score, roc_curve
 
@@ -12,6 +10,7 @@ from sklearn.metrics import roc_auc_score, roc_curve
 def plot_firing_vs_f1(
     latent_df: pd.DataFrame, num_tokens: int, out_dir: Path, run_label: str
 ) -> None:
+    px = import_plotly()
     out_dir.mkdir(parents=True, exist_ok=True)
     for module, module_df in latent_df.groupby("module"):
         module_df = module_df.copy()
@@ -48,6 +47,7 @@ def compute_auc(df: pd.DataFrame) -> float | None:
 
 
 def plot_accuracy_hist(df: pd.DataFrame, out_dir: Path):
+    px = import_plotly()
     out_dir.mkdir(exist_ok=True, parents=True)
     for label in df["score_type"].unique():
         fig = px.histogram(
@@ -68,6 +68,9 @@ def plot_roc_curve(df: pd.DataFrame, out_dir: Path):
 
     fpr, tpr, _ = roc_curve(valid_df.activating, valid_df.probability)
     auc = roc_auc_score(valid_df.activating, valid_df.probability)
+    import_plotly()
+    import plotly.graph_objects as go  # type: ignore
+
     fig = go.Figure(
         data=[
             go.Scatter(x=fpr, y=tpr, mode="lines", name=f"ROC (AUC={auc:.3f})"),

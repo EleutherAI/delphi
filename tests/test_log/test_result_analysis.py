@@ -142,3 +142,18 @@ def test_logging_empty_scores_returns_before_plotting(monkeypatch, tmp_path, cap
     monkeypatch.setattr(analysis, "load_data", lambda *args: (frame, None))
     analysis.log_results(tmp_path / "scores", tmp_path / "viz", [], ["detection"])
     assert "No data found" in capsys.readouterr().out
+
+
+def test_result_analysis_imports_without_plotly(monkeypatch):
+    """plotly is an optional extra (`[visualize]`); `delphi.__main__` imports this
+    module unconditionally, so importing it must not require plotly."""
+    import importlib
+    import sys
+
+    for name in [m for m in sys.modules if m == "plotly" or m.startswith("plotly.")]:
+        monkeypatch.delitem(sys.modules, name)
+    monkeypatch.setitem(sys.modules, "plotly", None)
+    monkeypatch.delitem(sys.modules, "delphi.log.result_analysis", raising=False)
+
+    analysis = importlib.import_module("delphi.log.result_analysis")
+    assert callable(analysis.log_results)
