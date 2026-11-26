@@ -13,7 +13,7 @@ from ...clients.client import Client
 from ...latents import ActivatingExample, Example, LatentRecord, NonActivatingExample
 from .classifier import Classifier, ScorerResult
 from .prompts.intruder_prompt import prompt as intruder_prompt
-from .sample import _prepare_text
+from .sample import _prepare_text, activation_highlight_indices
 
 
 @dataclass
@@ -179,7 +179,9 @@ class IntruderScorer(Classifier):
                 )
                 formatted_examples.append(text)
                 chosen_examples.append(example)
-                num_active_tokens += (example.activations > 0).sum().item()
+                # count the tokens _prepare_text highlighted, so the intruder
+                # gets as many marks as an activating example shows
+                num_active_tokens += len(activation_highlight_indices(example, 0.3))
 
             avg_active_tokens_per_example = num_active_tokens // len(active_examples)
             if self.type == "default":
