@@ -196,6 +196,7 @@ class IntruderScorer(Classifier):
                     n_incorrect=n_incorrect,
                     threshold=0.3,
                     highlighted=True,
+                    rng=self.rng,
                 )
 
             elif self.type == "internal":
