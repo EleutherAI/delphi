@@ -150,6 +150,9 @@ class LatentRecord:
     extra_examples: Optional[list[Example]] = None
     """Extra examples to include in the record."""
 
+    activation_data: Optional[ActivationData] = None
+    """Activation data for the latent, if it was saved."""
+
     per_token_frequency: float = 0.0
     """Frequency of the latent. Number of activations per total number of tokens."""
 
